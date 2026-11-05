@@ -1,0 +1,28 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://user:pass@localhost:5432/ci
+      JWT_SECRET: ci-only-secret-not-used-anywhere
+      NEXT_PUBLIC_API_URL: http://localhost:5000/api/v1
+      NEXTAUTH_SECRET: ci-only-secret
+      NEXTAUTH_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.5.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      # Switch to --frozen-lockfile once pnpm-lock.yaml has been regenerated and committed.
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm --filter @timeflow/api build
+      - run: pnpm --filter @timeflow/web build

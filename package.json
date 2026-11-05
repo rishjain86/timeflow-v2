@@ -1,0 +1,34 @@
+{
+  "name": "timeflow-erp",
+  "private": true,
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "start": "turbo run start",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "clean": "turbo run clean",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,md,json}\"",
+    "test": "turbo run test",
+    "test:watch": "turbo run test:watch",
+    "prepare": "husky install",
+    "db:generate": "pnpm --filter @timeflow/api db:generate",
+    "db:push": "pnpm --filter @timeflow/api db:push",
+    "db:migrate": "pnpm --filter @timeflow/api db:migrate",
+    "db:studio": "pnpm --filter @timeflow/api db:studio"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.3.0",
+    "@commitlint/config-conventional": "^19.2.2",
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.2",
+    "prettier": "^3.3.2",
+    "turbo": "^2.0.4"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.5.0"
+}

@@ -1,0 +1,1480 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// Enums
+// ==========================================
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  MANAGER
+  USER
+  THERAPIST
+  BILLING
+  FRONT_DESK
+  EMPLOYEE
+  CONSULTANT
+}
+
+enum TokenType {
+  PASSWORD_RESET
+  EMAIL_VERIFICATION
+  INVITATION
+}
+
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  COMPLETED
+  CANCELLED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CREDIT_CARD
+  BANK_TRANSFER
+  PAYPAL
+  STRIPE
+  CASH
+  OTHER
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum UnitType {
+  HOURS
+  PCS
+  LICENSE
+  DAY
+  MONTH
+  PROJECT
+  OTHER
+}
+
+enum ExpenseStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  REIMBURSED
+}
+
+enum NotificationType {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+}
+
+enum LeaveType {
+  SICK
+  CASUAL
+  ANNUAL
+  MATERNITY
+  PATERNITY
+  UNPAID
+  OTHER
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+// SPRINT 1: Healthcare Budgeting Enums
+enum AuthorizationStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+  EXHAUSTED
+}
+
+enum PayorType {
+  INSURANCE
+  WSIB
+  EMPLOYER
+  OUT_OF_POCKET
+  GOVERNMENT
+  OTHER
+}
+
+enum BudgetStatus {
+  HEALTHY
+  WARNING
+  NEAR_EXHAUSTION
+  EXHAUSTED
+  OVER_BUDGET
+}
+
+// SPRINT 6: Project/Employee Budget Control Enums
+enum ProjectBudgetStatus {
+  HEALTHY
+  WARNING
+  NEAR_EXHAUSTION
+  EXHAUSTED
+  OVER_BUDGET
+}
+
+enum AlertThreshold {
+  FIFTY
+  SEVENTY_FIVE
+  NINETY
+  ONE_HUNDRED
+}
+
+// SPRINT 3: Therapist & Scheduling Enums
+enum TherapistStatus {
+  ACTIVE
+  INACTIVE
+  ON_LEAVE
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+// SPRINT 4: Attendance Status
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+// SPRINT 5: Billing Status
+enum BillingStatus {
+  PENDING
+  READY
+  PROCESSING
+  BILLED
+  CANCELLED
+}
+
+// 🟢 NEW: Time Entry Approval Enum (Manager Approvals)
+enum TimeEntryApprovalStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// 🟢 NEW: Timer Session Enum
+enum TimerStatus {
+  RUNNING
+  PAUSED
+}
+
+// 🟢 NEW: SaaS Industry & Billing Enums (Added for SaaS Toggling)
+enum IndustryType {
+  GENERAL
+  HEALTHCARE
+}
+
+enum SubscriptionPlan {
+  FREE_TRIAL
+  PRO
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+// ==========================================
+// Models
+// ==========================================
+
+model Organization {
+  id                 String             @id @default(uuid())
+  name               String
+  domain             String?            @unique
+  isActive           Boolean            @default(true)
+
+  // 🟢 NEW: SaaS Feature Toggling & Billing
+  industryType       IndustryType       @default(GENERAL)
+  plan               SubscriptionPlan   @default(FREE_TRIAL)
+  subscriptionStatus SubscriptionStatus @default(TRIALING)
+  trialEndsAt        DateTime?
+  
+  // 🟢 NEW: Future Stripe Integration ke liye
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+
+  // Organization Profile
+  companyName        String?
+  logoUrl            String?
+  address            String?
+  phone              String?
+  email              String?
+  website            String?
+
+  // Financial & Invoice Settings
+  defaultCurrency    String             @default("USD") @db.Char(3)
+  taxRate            Decimal            @default(0) @db.Decimal(5, 2)
+  invoicePrefix      String             @default("INV-")
+  dueDays            Int                @default(15)
+  invoiceNotes       String?
+  footerText         String?
+  lastInvoiceSeq     Int                @default(0)
+
+  // Time Tracking Settings
+  defaultHourlyRate Decimal?          @db.Decimal(18, 4)
+  timeZone          String            @default("UTC")
+  dateFormat        String            @default("YYYY-MM-DD")
+  timeFormat        String            @default("24h") 
+
+  // System Settings
+  language          String            @default("en")
+  theme             String            @default("light") 
+  notificationsOn   Boolean           @default(true)
+
+  // Relationships
+  activeUsers       User[]            @relation("CurrentOrganization")
+  members           OrganizationMember[]
+  clients           Client[]
+  projects          Project[]
+  tasks             Task[]
+  timeEntries       TimeEntry[]
+  timerSessions     TimerSession[]
+  invoices          Invoice[]
+  invoiceItems      InvoiceItem[]
+  payments          Payment[]
+  expenses          Expense[]
+  notifications     Notification[]
+  attachments       Attachment[]
+  leaves            Leave[]
+  comments          Comment[]
+  teams             Team[]
+  auditLogs         AuditLog[]        
+
+  // SPRINT 1: Healthcare Budgeting & Funding Relations
+  authorizations    Authorization[]
+  fundingSources    FundingSource[]
+  budgets           Budget[]
+  budgetRevisions   BudgetRevisionHistory[]
+
+  // SPRINT 3: Healthcare Operations Relations
+  therapistProfiles TherapistProfile[]
+  serviceCodes      ServiceCode[]
+  appointments      Appointment[]
+
+  // SPRINT 4: Advanced Clinical Operations
+  attendances       Attendance[]
+  clinicalNotes     ClinicalNoteReview[]
+
+  // SPRINT 6: Project Budgets & Custom Rates
+  projectBudgets    ProjectBudget[]
+  projectTaskRates  ProjectTaskRate[] 
+
+  // 🟢 NEW: Granular Task Assignment Engine
+  taskAssignments   TaskAssignment[]
+
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@map("organizations")
+}
+
+model User {
+  id                 String          @id @default(uuid())
+  email              String          @unique
+  passwordHash       String
+  firstName          String
+  lastName           String?
+  
+  phone              String          @default("0000000000")
+  isBanned           Boolean         @default(false)
+  
+  role               Role            @default(USER)
+  isActive           Boolean         @default(true)
+  emailVerified      DateTime?
+
+  // 🟢 NEW: Email OTP & Password Reset Fields (Resend Integration)
+  isVerified               Boolean   @default(false)
+  verificationCode         String?   
+  verificationCodeExpiry   DateTime? 
+  resetPasswordToken       String?   
+  resetPasswordTokenExpiry DateTime?
+
+  // 🟢 NEW: Force password reset on first login
+  requirePasswordChange Boolean    @default(false)
+
+  // 🟢 NEW: Controls temporary Import/Export access for lower roles
+  canManageImports Boolean           @default(false)
+
+  // User-specific default hourly billing rate
+  hourlyRate        Decimal?         @db.Decimal(18, 4)
+
+  organizationId    String
+  organization      Organization     @relation("CurrentOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
+
+  memberships       OrganizationMember[]
+
+  // Auth Relationships
+  sessions          Session[]
+
+  // Relationships
+  assignedTasks     Task[]           @relation("TaskAssignee")
+  timeEntries       TimeEntry[]
+  timerSessions     TimerSession[]
+  expenses          Expense[]
+  expensesApproved  Expense[]        @relation("ExpenseApprover")
+  notifications     Notification[]
+  attachments       Attachment[]
+  leaves            Leave[]          @relation("UserLeaves")
+  approvedLeaves    Leave[]          @relation("LeaveApprover")
+  comments          Comment[]
+  managedTeams      Team[]           @relation("TeamManager")
+  teams             TeamMember[]     @relation("UserTeamMemberships")
+  auditLogs         AuditLog[]        
+
+  // 🟢 NEW: Directly Assigned Projects (Cases)
+  assignedProjects  Project[]        @relation("ProjectAssignee")
+
+  // SPRINT 1: Healthcare Budgeting & Funding Relations
+  budgetRevisions   BudgetRevisionHistory[]
+
+  // SPRINT 3: Therapist / Staff Relations
+  therapistProfile  TherapistProfile?
+
+  // SPRINT 6: Employee Allocations
+  projectBudgets    ProjectMemberBudget[]
+  budgetRequests    BudgetRequest[] 
+
+  // 🟢 NEW: Granular Task Assignment Engine
+  taskAssignments   TaskAssignment[]
+
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([email])
+  @@index([organizationId])
+  @@map("users")
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  ipAddress    String?
+  userAgent    String?
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model VerificationToken {
+  id         String    @id @default(uuid())
+  identifier String    
+  token      String    @unique
+  type       TokenType
+  expires    DateTime
+
+  createdAt  DateTime  @default(now())
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model Client {
+  id             String       @id @default(uuid())
+  name           String
+  email          String?
+  phone          String?
+  address        String?
+  companyName    String?
+  isActive       Boolean      @default(true)
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Relationships
+  projects       Project[]
+  invoices       Invoice[]
+  expenses       Expense[]
+  attachments    Attachment[]
+  comments       Comment[]
+  timeEntries    TimeEntry[]
+
+  // SPRINT 3: Scheduling
+  appointments   Appointment[]
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, email]) 
+  @@index([organizationId])
+  @@map("clients")
+}
+
+model Project {
+  id             String        @id @default(uuid())
+  name           String
+  slug           String?       @default(uuid()) 
+  description    String?       @db.Text
+  status         ProjectStatus @default(PLANNING)
+  startDate      DateTime?
+  endDate        DateTime?
+  isActive       Boolean       @default(true)
+  isArchived     Boolean       @default(false) 
+
+  // 🟢 NEW: Import Specific Fields & Advanced Case Data
+  modality             String?       @db.VarChar(50)
+  hcaiNumber           String?       @db.VarChar(100)
+  approver             String?       @db.VarChar(100)
+  approvalStatus       String?       @db.VarChar(50)
+  approvedServices     String[]      
+  notApprovedServices  String[]      
+
+  // 🟢 NEW: Direct Assigned Therapist/Case Owner
+  assignedToId         String?
+  assignedTo           User?         @relation("ProjectAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  // Project-specific hourly billing rate
+  hourlyRate     Decimal?      @db.Decimal(18, 4)
+
+  budget         Decimal?      @db.Decimal(18, 4)
+
+  clientId       String?
+  client         Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Relationships
+  tasks          Task[]
+  timeEntries    TimeEntry[]
+  timerSessions  TimerSession[] 
+  invoices       Invoice[]
+  expenses       Expense[]
+  attachments    Attachment[]
+  comments       Comment[]
+
+  // SPRINT 1: Healthcare Budgeting & Funding Relations
+  authorizations Authorization[]
+
+  // SPRINT 6: Project/Employee Task Budget
+  projectBudget  ProjectBudget?
+  customTaskRates ProjectTaskRate[] 
+  budgetRequests  BudgetRequest[] 
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([organizationId, name]) 
+  @@index([organizationId])
+  @@index([clientId])
+  @@index([assignedToId])
+  @@map("projects")
+}
+
+model Task {
+  id                         String       @id @default(uuid())
+  name                       String
+  description                String?
+  status                     TaskStatus   @default(TODO)
+  dueDate                    DateTime?
+  isActive                   Boolean      @default(true)
+
+  // SPRINT 6 & HARVEST: Task Config
+  isBillable                 Boolean      @default(true)
+  requiresClinicalCompliance Boolean      @default(false)
+  defaultSessionLimitHours   Decimal?     @db.Decimal(10, 2)
+  hourlyRate                 Decimal?     @db.Decimal(18, 4) 
+
+  projectId                  String
+  project                    Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // Legacy fallback relationship
+  assignedToId               String?
+  assignedTo                 User?        @relation("TaskAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  organizationId             String
+  organization               Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Relationships
+  timeEntries                TimeEntry[]
+  timerSessions              TimerSession[] 
+  attachments                Attachment[]
+  comments                   Comment[]
+  projectTaskBudgets         ProjectTaskBudget[] 
+  customProjectRates         ProjectTaskRate[] 
+
+  // 🟢 NEW: Granular Task Assignment Engine
+  assignments                TaskAssignment[]
+
+  createdAt                  DateTime     @default(now())
+  updatedAt                  DateTime     @updatedAt
+
+  @@unique([projectId, name]) 
+  @@index([projectId])
+  @@index([assignedToId])
+  @@index([organizationId])
+  @@map("tasks")
+}
+
+// 🟢 NEW: TIMER SESSION MODEL
+model TimerSession {
+  id                 String       @id @default(uuid())
+  organizationId     String
+  userId             String
+  clientId           String?
+  projectId          String
+  taskId             String
+  
+  status             TimerStatus  @default(RUNNING)
+  startedAt          DateTime     @default(now())
+  pausedAt           DateTime?
+  totalPausedSeconds Int          @default(0)
+  notes              String?      @db.Text
+
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  user               User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project            Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task               Task         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@index([userId])
+  @@map("timer_sessions")
+}
+
+model TimeEntry {
+  id                 String         @id @default(uuid())
+  date               DateTime
+  duration           Decimal        @db.Decimal(10, 2) 
+  description        String?
+  isBillable         Boolean        @default(true)
+
+  // Harvest Engine Billing Snapshot
+  hourlyRate         Decimal?       @db.Decimal(18, 4) 
+  billableAmount     Decimal?       @db.Decimal(18, 4) 
+
+  // SPRINT 6: Inline Document Links
+  cnrDocumentUrl         String?
+  attendanceDocumentUrl  String?
+
+  // 🟢 NEW: Manager Approval System
+  approvalStatus     TimeEntryApprovalStatus @default(PENDING)
+  rejectionReason    String?        @db.Text
+  isResubmitted      Boolean        @default(false) 
+
+  // SPRINT 5: Newly Added Billing Fields
+  billingStatus      BillingStatus  @default(PENDING)
+  invoiceId          String?
+  invoice            Invoice?       @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  invoiceItem        InvoiceItem?   
+
+  clientId           String?
+  client             Client?        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  projectId          String
+  project            Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  taskId             String?
+  task               Task?          @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  // Sprint 2/3 Prep: Healthcare Multi-Payor & Service Code Relation
+  fundingSourceId    String?
+  fundingSource      FundingSource? @relation(fields: [fundingSourceId], references: [id], onDelete: SetNull)
+
+  serviceCodeId      String?
+  serviceCode        ServiceCode?   @relation(fields: [serviceCodeId], references: [id], onDelete: SetNull)
+
+  appointmentId      String?        @unique
+  appointment        Appointment?   @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  userId             String
+  user               User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  organizationId     String
+  organization       Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  @@index([projectId])
+  @@index([taskId])
+  @@index([fundingSourceId])
+  @@index([serviceCodeId])
+  @@index([userId])
+  @@index([organizationId])
+  @@index([clientId])
+  @@index([invoiceId])
+  @@index([approvalStatus]) 
+  @@map("time_entries")
+}
+
+model Invoice {
+  id               String         @id @default(uuid())
+  invoiceNumber    String
+  issueDate        DateTime
+  dueDate          DateTime?
+  status           InvoiceStatus  @default(DRAFT)
+  currency         String         @default("USD") @db.Char(3)
+
+  subtotal         Decimal        @default(0) @db.Decimal(18, 4)
+  taxRate          Decimal        @default(0) @db.Decimal(5, 2)
+  taxAmount        Decimal        @default(0) @db.Decimal(18, 4)
+  discountAmount   Decimal        @default(0) @db.Decimal(18, 4)
+  totalAmount      Decimal        @default(0) @db.Decimal(18, 4)
+
+  amountPaid       Decimal        @default(0) @db.Decimal(18, 4)
+  balanceDue       Decimal        @default(0) @db.Decimal(18, 4)
+
+  notes            String?
+
+  sentAt           DateTime?
+  paidAt           DateTime?
+
+  clientId         String
+  client           Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  projectId        String?
+  project          Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  fundingSourceId  String?
+  fundingSource    FundingSource? @relation(fields: [fundingSourceId], references: [id], onDelete: SetNull)
+
+  organizationId   String
+  organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  items            InvoiceItem[]
+  payments         Payment[]
+  attachments      Attachment[]
+  comments         Comment[]
+  timeEntries      TimeEntry[]
+
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([organizationId, invoiceNumber])
+  @@index([clientId])
+  @@index([organizationId])
+  @@index([fundingSourceId])
+  @@index([organizationId, status])
+  @@index([organizationId, issueDate])
+  @@index([organizationId, dueDate])
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id             String       @id @default(uuid())
+  description    String
+
+  quantity       Decimal      @default(1) @db.Decimal(10, 2)
+  unitPrice      Decimal      @db.Decimal(18, 4)
+
+  hours          Decimal?     @db.Decimal(10, 2)
+  hourlyRate     Decimal?     @db.Decimal(18, 4)
+
+  taxRate        Decimal      @default(0) @db.Decimal(5, 2)
+  discount       Decimal      @default(0) @db.Decimal(18, 4)
+  lineTotal      Decimal      @db.Decimal(18, 4)
+
+  unit           UnitType     @default(HOURS)
+
+  timeEntryId    String?      @unique
+  timeEntry      TimeEntry?   @relation(fields: [timeEntryId], references: [id], onDelete: SetNull)
+
+  invoiceId      String
+  invoice        Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([invoiceId])
+  @@index([organizationId])
+  @@map("invoice_items")
+}
+
+model Payment {
+  id              String        @id @default(uuid())
+  amount          Decimal       @db.Decimal(18, 4)
+  paymentDate     DateTime      @default(now())
+  paymentMethod   PaymentMethod @default(BANK_TRANSFER)
+  paymentStatus   PaymentStatus @default(PENDING) 
+  referenceNumber String?
+  notes           String?
+
+  invoiceId       String
+  invoice         Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  organizationId  String
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([organizationId, referenceNumber])
+  @@index([invoiceId])
+  @@index([organizationId])
+  @@map("payments")
+}
+
+model Expense {
+  id              String        @id @default(uuid())
+  title           String
+  description     String?
+  amount          Decimal       @db.Decimal(18, 4)
+  currency        String        @default("USD") @db.Char(3)
+  expenseDate     DateTime      @default(now())
+  category        String        
+  paymentMethod   PaymentMethod @default(BANK_TRANSFER)
+  status          ExpenseStatus @default(SUBMITTED)
+  receiptUrl      String?
+  referenceNumber String?
+  isBillable      Boolean       @default(false)
+
+  approvedById    String?
+  approvedBy      User?         @relation("ExpenseApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt      DateTime?
+  reimbursedAt    DateTime?
+
+  organizationId  String
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  projectId       String?
+  project         Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  clientId        String?
+  client          Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  fundingSourceId String?
+  fundingSource   FundingSource? @relation(fields: [fundingSourceId], references: [id], onDelete: SetNull)
+
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  attachments     Attachment[]
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([organizationId, referenceNumber])
+  @@index([organizationId])
+  @@index([projectId])
+  @@index([clientId])
+  @@index([fundingSourceId])
+  @@index([organizationId, expenseDate])
+  @@index([organizationId, category])
+  @@index([organizationId, userId])
+  @@index([organizationId, status])
+  @@map("expenses")
+}
+
+model Notification {
+  id             String           @id @default(uuid())
+  title          String
+  message        String
+  type           NotificationType @default(INFO)
+  isRead         Boolean          @default(false)
+  link           String?          
+
+  userId         String
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime         @default(now())
+
+  @@index([userId])
+  @@index([organizationId])
+  @@index([organizationId, isRead])
+  @@map("notifications")
+}
+
+model Attachment {
+  id                   String       @id @default(uuid())
+  fileName             String
+  originalName         String
+  mimeType             String
+  size                 Int          
+  url                  String       
+
+  projectId            String?
+  project              Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  taskId               String?
+  task                 Task?        @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  expenseId            String?
+  expense              Expense?     @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+
+  clientId             String?
+  client               Client?      @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  invoiceId            String?
+  invoice              Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+
+  attendanceId         String?
+  attendance           Attendance?  @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
+
+  clinicalNoteReviewId String?
+  clinicalNoteReview   ClinicalNoteReview? @relation(fields: [clinicalNoteReviewId], references: [id], onDelete: SetNull)
+
+  uploadedById         String
+  uploadedBy           User         @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  organizationId       String
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@index([projectId])
+  @@index([taskId])
+  @@index([expenseId])
+  @@index([clientId])
+  @@index([invoiceId])
+  @@index([attendanceId])
+  @@index([clinicalNoteReviewId])
+  @@map("attachments")
+}
+
+model Leave {
+  id             String       @id @default(uuid())
+  startDate      DateTime
+  endDate        DateTime
+  type           LeaveType
+  status         LeaveStatus  @default(PENDING)
+  reason         String
+
+  userId         String
+  user           User         @relation("UserLeaves", fields: [userId], references: [id], onDelete: Cascade)
+
+  approvedById   String?
+  approvedBy     User?        @relation("LeaveApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt     DateTime?
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([organizationId, status])
+  @@map("leaves")
+}
+
+model Comment {
+  id             String       @id @default(uuid())
+  content        String       @db.Text
+
+  projectId      String?
+  project        Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  taskId         String?
+  task           Task?        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  clientId       String?
+  client         Client?      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  invoiceId      String?
+  invoice        Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@index([projectId])
+  @@index([taskId])
+  @@index([clientId])
+  @@index([invoiceId])
+  @@map("comments")
+}
+
+model Team {
+  id             String       @id @default(uuid())
+  name           String
+  description    String?      @db.Text
+
+  managerId      String?
+  manager        User?        @relation("TeamManager", fields: [managerId], references: [id], onDelete: SetNull)
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  members        TeamMember[]
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@map("teams")
+}
+
+model TeamMember {
+  id        String   @id @default(uuid())
+
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  userId    String
+  user      User     @relation("UserTeamMemberships", fields: [userId], references: [id], onDelete: Cascade)
+
+  joinedAt  DateTime @default(now())
+
+  @@unique([teamId, userId])
+  @@index([userId])
+  @@map("team_members")
+}
+
+model AuditLog {
+  id             String       @id @default(uuid())
+  action         String
+  entityType     String
+  entityId       String
+  details        Json?
+
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+// ==========================================
+// SPRINT 1: HEALTHCARE BUDGETING & FUNDING
+// ==========================================
+
+model Authorization {
+  id                  String              @id @default(uuid())
+  authNumber          String              
+  startDate           DateTime
+  endDate             DateTime
+  status              AuthorizationStatus @default(ACTIVE)
+
+  projectId           String
+  project             Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  fundingSources      FundingSource[]
+
+  limits              AuthorizationLimit[]
+
+  organizationId      String
+  organization        Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  @@unique([organizationId, authNumber])
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([projectId])
+  @@index([status])
+  @@map("authorizations")
+}
+
+model FundingSource {
+  id              String        @id @default(uuid())
+  name            String        
+  payorType       PayorType
+
+  authorizationId String
+  authorization   Authorization @relation(fields: [authorizationId], references: [id], onDelete: Cascade)
+
+  budget          Budget?       
+  timeEntries     TimeEntry[]
+  invoices        Invoice[]
+  expenses        Expense[]
+
+  organizationId  String
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([organizationId])
+  @@index([authorizationId])
+  @@map("funding_sources")
+}
+
+model Budget {
+  id                  String       @id @default(uuid())
+
+  approvedHours       Float        @default(0)
+  approvedCost        Decimal      @default(0) @db.Decimal(18, 4)
+  internalCostBudget  Decimal      @default(0) @db.Decimal(18, 4)
+
+  consumedHours       Float        @default(0)
+  consumedCost        Decimal      @default(0) @db.Decimal(18, 4)
+  billableConsumed    Decimal      @default(0) @db.Decimal(18, 4)
+  progressPercentage  Float        @default(0) 
+  status              BudgetStatus @default(HEALTHY)
+
+  autoAllocateOverage Boolean      @default(true)
+
+  fundingSourceId     String       @unique 
+  fundingSource       FundingSource @relation(fields: [fundingSourceId], references: [id], onDelete: Cascade)
+
+  revisions           BudgetRevisionHistory[]
+
+  organizationId      String
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@index([status])
+  @@map("budgets")
+}
+
+model BudgetRevisionHistory {
+  id             String       @id @default(uuid())
+
+  previousHours  Float
+  newHours       Float
+  previousCost   Decimal      @db.Decimal(18, 4)
+  newCost        Decimal      @db.Decimal(18, 4)
+  reason         String       @db.Text
+
+  budgetId       String
+  budget         Budget       @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+
+  changedById    String
+  changedBy      User         @relation(fields: [changedById], references: [id]) 
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime     @default(now()) 
+
+  @@index([organizationId])
+  @@index([budgetId])
+  @@index([changedById])
+  @@map("budget_revision_histories")
+}
+
+// ==========================================
+// SPRINT 3: THERAPIST & OPERATIONS MODULES
+// ==========================================
+
+model TherapistProfile {
+  id             String          @id @default(uuid())
+
+  userId         String          @unique
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  credentialType String?         
+  licenseNumber  String?
+  npiNumber      String?         
+
+  supervisorId   String?
+  supervisor     TherapistProfile?  @relation("TherapistSupervision", fields: [supervisorId], references: [id])
+  supervisees    TherapistProfile[] @relation("TherapistSupervision")
+
+  status         TherapistStatus @default(ACTIVE)
+
+  appointments   Appointment[]
+
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([organizationId])
+  @@index([supervisorId])
+  @@index([status])
+  @@map("therapist_profiles")
+}
+
+model ServiceCode {
+  id             String       @id @default(uuid())
+
+  code           String       
+  description    String?      @db.Text
+
+  defaultRate    Decimal      @db.Decimal(18, 4) 
+  isActive       Boolean      @default(true)
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  timeEntries    TimeEntry[]
+  appointments   Appointment[]
+  authorizationLimits AuthorizationLimit[]
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([isActive])
+  @@map("service_codes")
+}
+
+model AuthorizationLimit {
+  id              String        @id @default(uuid())
+
+  approvedUnits   Float         
+  consumedUnits   Float         @default(0) 
+
+  authorizationId String
+  authorization   Authorization @relation(fields: [authorizationId], references: [id], onDelete: Cascade)
+
+  serviceCodeId   String
+  serviceCode     ServiceCode   @relation(fields: [serviceCodeId], references: [id], onDelete: Restrict)
+
+  @@unique([authorizationId, serviceCodeId])
+  @@index([authorizationId])
+  @@index([serviceCodeId])
+  @@map("authorization_limits")
+}
+
+model Appointment {
+  id              String            @id @default(uuid())
+  title           String?
+  startTime       DateTime
+  endTime         DateTime
+  status          AppointmentStatus @default(SCHEDULED)
+  notes           String?           @db.Text
+
+  organizationId  String
+  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  clientId        String
+  client          Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  therapistId     String
+  therapist       TherapistProfile  @relation(fields: [therapistId], references: [id], onDelete: Restrict)
+
+  serviceCodeId   String?
+  serviceCode     ServiceCode?      @relation(fields: [serviceCodeId], references: [id], onDelete: SetNull)
+
+  timeEntry       TimeEntry?
+
+  attendance      Attendance?
+  clinicalNote    ClinicalNoteReview?
+
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([organizationId])
+  @@index([clientId])
+  @@index([therapistId])
+  @@index([status])
+  @@index([startTime])
+  @@map("appointments")
+}
+
+// ==========================================
+// SPRINT 4: ADVANCED FINANCIAL & CLINICAL OPERATIONS
+// ==========================================
+
+model Attendance {
+  id              String             @id @default(uuid())
+  sessionDate     DateTime           @default(now())
+  status          AttendanceStatus   @default(PRESENT)
+
+  therapistSigned Boolean            @default(false)
+  clientSigned    Boolean            @default(false)
+  signedAt        DateTime?
+
+  appointmentId   String             @unique
+  appointment     Appointment        @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  organizationId  String
+  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  attachments     Attachment[]
+
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([organizationId])
+  @@map("attendances")
+}
+
+model ClinicalNoteReview {
+  id              String             @id @default(uuid())
+  reviewDate      DateTime           @default(now())
+  isApproved      Boolean            @default(false)
+  notes           String?            @db.Text
+
+  therapistSigned Boolean            @default(false)
+  clientSigned    Boolean            @default(false)
+  signedAt        DateTime?
+
+  appointmentId   String             @unique
+  appointment     Appointment        @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  organizationId  String
+  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  attachments     Attachment[]
+
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([organizationId])
+  @@index([isApproved])
+  @@map("clinical_note_reviews")
+}
+
+model OrganizationMember {
+  id             String       @id @default(uuid())
+
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  joinedAt       DateTime     @default(now())
+
+  @@unique([userId, organizationId])
+  @@index([userId])
+  @@index([organizationId])
+  @@map("organization_members")
+}
+
+// ==========================================
+// SPRINT 6: PROJECT BUDGET & COMPLIANCE ENGINE
+// ==========================================
+
+model ProjectBudget {
+  id                  String              @id @default(uuid())
+  totalAllocatedHours Decimal             @default(0) @db.Decimal(10, 2)
+  consumedHours       Decimal             @default(0) @db.Decimal(10, 2)
+  remainingHours      Decimal             @default(0) @db.Decimal(10, 2)
+  progressPercentage  Float               @default(0)
+  status              ProjectBudgetStatus @default(HEALTHY)
+
+  alert50Enabled      Boolean             @default(true)
+  alert75Enabled      Boolean             @default(true)
+  alert90Enabled      Boolean             @default(true)
+  alert100Enabled     Boolean             @default(true)
+  allowOverBudget     Boolean             @default(false)
+
+  projectId           String              @unique
+  project             Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  organizationId      String
+  organization        Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  memberBudgets       ProjectMemberBudget[]
+  taskBudgets         ProjectTaskBudget[]
+  alertEvents         BudgetAlertEvent[]
+
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  @@index([organizationId])
+  @@index([status])
+  @@map("project_budgets")
+}
+
+model ProjectMemberBudget {
+  id                 String              @id @default(uuid())
+  allocatedHours     Decimal             @default(0) @db.Decimal(10, 2)
+  consumedHours      Decimal             @default(0) @db.Decimal(10, 2)
+  remainingHours     Decimal             @default(0) @db.Decimal(10, 2)
+  progressPercentage Float               @default(0)
+  status             ProjectBudgetStatus @default(HEALTHY)
+
+  projectBudgetId    String
+  projectBudget      ProjectBudget       @relation(fields: [projectBudgetId], references: [id], onDelete: Cascade)
+
+  userId             String
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  alertEvents        BudgetAlertEvent[]
+
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@unique([projectBudgetId, userId])
+  @@index([userId])
+  @@map("project_member_budgets")
+}
+
+model ProjectTaskBudget {
+  id                  String              @id @default(uuid())
+  allocatedHours      Decimal             @default(0) @db.Decimal(10, 2)
+  consumedHours       Decimal             @default(0) @db.Decimal(10, 2)
+  remainingHours      Decimal             @default(0) @db.Decimal(10, 2)
+  progressPercentage  Float               @default(0)
+  status              ProjectBudgetStatus @default(HEALTHY)
+  sessionLimitHours   Decimal?            @db.Decimal(10, 2)
+
+  projectBudgetId     String
+  projectBudget       ProjectBudget       @relation(fields: [projectBudgetId], references: [id], onDelete: Cascade)
+
+  taskId              String
+  task                Task                @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  @@unique([projectBudgetId, taskId])
+  @@index([taskId])
+  @@index([projectBudgetId])
+  @@map("project_task_budgets")
+}
+
+model BudgetAlertEvent {
+  id                    String              @id @default(uuid())
+  threshold             AlertThreshold
+  consumptionPercentage Float
+
+  projectBudgetId       String
+  projectBudget         ProjectBudget       @relation(fields: [projectBudgetId], references: [id], onDelete: Cascade)
+
+  projectMemberBudgetId String?
+  projectMemberBudget   ProjectMemberBudget? @relation(fields: [projectMemberBudgetId], references: [id], onDelete: Cascade)
+
+  userId                String
+  organizationId        String
+
+  createdAt             DateTime            @default(now())
+
+  @@unique([projectBudgetId, projectMemberBudgetId, threshold])
+  @@index([organizationId])
+  @@index([projectBudgetId])
+  @@index([projectMemberBudgetId])
+  @@map("budget_alert_events")
+}
+
+// ==========================================
+// 🟢 NEW SMART BUDGET MATRIX
+// ==========================================
+
+model ProjectTaskRate {
+  id             String       @id @default(uuid())
+  customRate     Decimal      @db.Decimal(18, 4)
+
+  projectId      String
+  project        Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  taskId         String
+  task           Task         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([projectId, taskId])
+  @@index([projectId])
+  @@index([taskId])
+  @@index([organizationId])
+  @@map("project_task_rates")
+}
+
+// ==========================================
+// 🟢 NEW BUDGET REQUEST
+// ==========================================
+
+model BudgetRequest {
+  id             String   @id @default(uuid())
+  projectId      String
+  taskId         String?
+  userId         String
+  organizationId String
+  requestedHours Float
+  reason         String?
+  status         String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([userId])
+  @@index([organizationId])
+  @@map("budget_requests")
+}
+
+// ==========================================
+// 🟢 NEW: MULTI-USER TASK ASSIGNMENT ENGINE
+// ==========================================
+
+model TaskAssignment {
+  id             String       @id @default(uuid())
+  
+  taskId         String
+  task           Task         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime     @default(now())
+
+  @@unique([taskId, userId]) 
+  @@index([taskId])
+  @@index([userId])
+  @@index([organizationId])
+  @@map("task_assignments")
+}
