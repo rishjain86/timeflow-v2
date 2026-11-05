@@ -1,10 +1,15 @@
 import { Request } from 'express';
 import prisma from '../lib/prisma';
-import { AuditAction, AuditEntity } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { z } from 'zod';
+import { AuditActionEnum, AuditEntityEnum } from '../schemas/audit.schema';
+
+export type AuditAction = z.infer<typeof AuditActionEnum>;
+export type AuditEntity = z.infer<typeof AuditEntityEnum>;
 
 interface LogAuditParams {
   organizationId: string;
-  userId?: string;
+  userId: string;
   action: AuditAction;
   entity: AuditEntity;
   entityId?: string;
@@ -47,12 +52,14 @@ export const logAudit = async ({
         organizationId,
         userId,
         action,
-        entity,
-        entityId,
-        oldValues: oldValues ? sanitize(oldValues) : undefined,
-        newValues: newValues ? sanitize(newValues) : undefined,
-        ipAddress,
-        userAgent,
+        entityType: entity,
+        entityId: entityId ?? '',
+        details: {
+          oldValues: oldValues ? sanitize(oldValues) : null,
+          newValues: newValues ? sanitize(newValues) : null,
+          ipAddress,
+          userAgent,
+        } as Prisma.InputJsonValue,
       },
     });
   } catch (error) {

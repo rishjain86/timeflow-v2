@@ -24,7 +24,7 @@ export const getAuditLogs = async (req: AuthenticatedRequest, res: Response, nex
 
     if (userId) where.userId = userId;
     if (action) where.action = action;
-    if (entity) where.entity = entity;
+    if (entity) where.entityType = entity;
 
     if (startDate || endDate) {
       where.createdAt = {};
@@ -34,8 +34,11 @@ export const getAuditLogs = async (req: AuthenticatedRequest, res: Response, nex
 
     if (search) {
       where.OR = [
-        { ipAddress: { contains: search, mode: 'insensitive' } },
-        { userAgent: { contains: search, mode: 'insensitive' } },
+        { entityId: { contains: search, mode: 'insensitive' } },
+        { entityType: { contains: search, mode: 'insensitive' } },
+        { action: { contains: search, mode: 'insensitive' } },
+        { details: { path: ['ipAddress'], string_contains: search } },
+        { details: { path: ['userAgent'], string_contains: search } },
       ];
     }
 

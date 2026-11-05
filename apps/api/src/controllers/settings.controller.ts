@@ -2,7 +2,6 @@ import { Response, NextFunction, Request } from 'express';
 import prisma from '../lib/prisma';
 import { updateSettingsSchema } from '../schemas/settings.schema';
 import { logAudit } from '../services/audit.service';
-import { AuditAction, AuditEntity } from '@prisma/client';
 
 export interface AuthenticatedRequest extends Request {
   user: {
@@ -56,8 +55,8 @@ export const updateSettings = async (req: AuthenticatedRequest, res: Response, n
     await logAudit({
       organizationId,
       userId,
-      action: AuditAction.UPDATE,
-      entity: AuditEntity.SETTINGS,
+      action: 'UPDATE',
+      entity: 'SETTINGS',
       entityId: updatedSettings.id,
       oldValues: existingSettings || {},
       newValues: updatedSettings,
