@@ -113,7 +113,7 @@ export const getDashboardStats = async (
         return acc;
       }, { ...defaultTaskStats });
 
-      const totalMonthlyMinutes = monthlyTimeLogged._sum.duration || 0;
+      const totalMonthlyMinutes = Number(monthlyTimeLogged._sum.duration ?? 0);
       const totalMonthlyHours = Math.round((totalMonthlyMinutes / 60) * 100) / 100;
 
       return res.status(200).json({
@@ -203,7 +203,7 @@ export const getDashboardStats = async (
         return acc;
       }, { ...defaultTaskStats });
 
-      const totalMonthlyMinutes = myMonthlyTimeLogged._sum.duration || 0;
+      const totalMonthlyMinutes = Number(myMonthlyTimeLogged._sum.duration ?? 0);
       const totalMonthlyHours = Math.round((totalMonthlyMinutes / 60) * 100) / 100;
 
       return res.status(200).json({

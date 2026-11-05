@@ -273,8 +273,8 @@ export const updateInvoice = async (req: Request<{ id: string }>, res: Response,
       throw new ConflictError(`Cannot modify an invoice that is already ${existingInvoice.status}`);
     }
 
-    let updatedSubtotal = existingInvoice.subtotal;
-    let updatedTaxRate = existingInvoice.taxRate;
+    let updatedSubtotal: number = Number(existingInvoice.subtotal);
+    let updatedTaxRate: number = Number(existingInvoice.taxRate);
     
     // 🟢 FIX: Recalculate subtotal dynamically if items array is being updated
     if (items && Array.isArray(items)) {
