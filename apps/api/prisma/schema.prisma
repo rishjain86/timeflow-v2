@@ -61,6 +61,8 @@ enum PaymentMethod {
   STRIPE
   CASH
   OTHER
+  CHECK
+  ONLINE
 }
 
 enum PaymentStatus {
