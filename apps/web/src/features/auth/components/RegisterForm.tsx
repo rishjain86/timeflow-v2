@@ -23,7 +23,7 @@ import {
 
 const registerSchema = z.object({
   firstName: z.string().min(2, 'First name is required'),
-  lastName: z.string().optional(),
+  lastName: z.string().trim().min(2, 'Last name is required'),
   email: z.string().email('Invalid email address'),
   phone: z.string().min(10, 'Valid phone number is required'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
@@ -123,6 +123,11 @@ export const RegisterForm = () => {
               className={carvedInputClass}
             />
           </div>
+          {errors.lastName && (
+            <span className="block text-destructive text-xs font-semibold ml-1">
+              {errors.lastName.message}
+            </span>
+          )}
         </div>
       </div>
 

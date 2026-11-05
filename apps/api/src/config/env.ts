@@ -11,6 +11,13 @@ const envSchema = z.object({
   DATABASE_URL: z.string(),
   JWT_SECRET: z.string().min(16),
   REDIS_URL: z.string().url().optional(),
+  FRONTEND_URL: z.string().optional(),
+  CORS_ORIGIN: z.string().optional(),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.string().optional(),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  MAIL_FROM_ADDRESS: z.string().optional(),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
