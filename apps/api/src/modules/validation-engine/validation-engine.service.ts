@@ -188,7 +188,7 @@ export const validateTreatmentCompliance = async (
 
   const missing = [];
   
-  if (!attendance || ![AttendanceStatus.PRESENT, AttendanceStatus.LATE].includes(attendance.status)) {
+  if (!attendance || !([AttendanceStatus.PRESENT, AttendanceStatus.LATE] as AttendanceStatus[]).includes(attendance.status)) {
     missing.push('Attendance');
   }
   

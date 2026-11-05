@@ -2,7 +2,6 @@ import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';
-import bcrypt from 'bcryptjs';
 import { prisma } from './config/prisma';
 import { env } from './config/env';
 
@@ -103,8 +102,7 @@ const createRateLimiter = (maxRequests: number, windowMinutes: number, scope: st
     if (
       req.method === 'OPTIONS' ||
       req.path === '/api/health' ||
-      req.path.startsWith('/api/v1/health') ||
-      req.path.includes('emergency-super-admin')
+      req.path.startsWith('/api/v1/health')
     ) {
       next();
       return;
@@ -233,62 +231,6 @@ app.use(globalApiLimiter);
 // Serve static files from the uploads directory
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads'), { dotfiles: 'deny' }));
 
-// ============================================================================
-// 🔑 EMERGENCY SUPER ADMIN RECOVERY ROUTE (Directly Mounted at Root & v1)
-// ============================================================================
-const handleEmergencyAdminReset = async (req: Request, res: Response) => {
-  try {
-    const newPlainPassword = 'Admin@12345';
-    const hashedPassword = await bcrypt.hash(newPlainPassword, 10);
-
-    let adminUser = await prisma.user.findFirst({
-      where: { role: { in: ['SUPER_ADMIN', 'ADMIN'] as any } },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    if (!adminUser) {
-      adminUser = await prisma.user.findFirst({ orderBy: { createdAt: 'asc' } });
-    }
-
-    if (adminUser) {
-      const updated = await prisma.user.update({
-        where: { id: adminUser.id },
-        data: { password: hashedPassword, role: 'SUPER_ADMIN' as any, isActive: true },
-      });
-      return res.status(200).json({
-        success: true,
-        message: '✅ Super Admin credentials recovered successfully!',
-        loginCredentials: { email: updated.email, password: newPlainPassword, role: updated.role },
-      });
-    } else {
-      let org = await prisma.organization.findFirst();
-      if (!org) {
-        org = await prisma.organization.create({ data: { name: 'TimeFlow Enterprise', industryType: 'HEALTHCARE' as any } });
-      }
-      const created = await prisma.user.create({
-        data: {
-          firstName: 'Super',
-          lastName: 'Admin',
-          email: 'admin@timeflow.io',
-          password: hashedPassword,
-          role: 'SUPER_ADMIN' as any,
-          organizationId: org.id,
-          isActive: true,
-        },
-      });
-      return res.status(200).json({
-        success: true,
-        message: '✅ Fresh Super Admin account created successfully!',
-        loginCredentials: { email: created.email, password: newPlainPassword, role: created.role },
-      });
-    }
-  } catch (error: any) {
-    return res.status(500).json({ success: false, message: 'Failed to recover Super Admin', error: error?.message });
-  }
-};
-
-app.get('/emergency-super-admin', handleEmergencyAdminReset);
-app.get('/api/v1/emergency-super-admin', handleEmergencyAdminReset);
 
 // --- Routes ---
 app.use('/api/v1/health', healthRoutes);

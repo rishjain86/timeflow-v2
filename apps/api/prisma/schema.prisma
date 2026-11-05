@@ -318,6 +318,7 @@ model User {
   passwordHash       String
   firstName          String
   lastName           String?
+  avatarUrl          String?
   
   phone              String          @default("0000000000")
   isBanned           Boolean         @default(false)
@@ -545,6 +546,7 @@ model Task {
 
   // 🟢 NEW: Granular Task Assignment Engine
   assignments                TaskAssignment[]
+  budgetRequests             BudgetRequest[]
 
   createdAt                  DateTime     @default(now())
   updatedAt                  DateTime     @updatedAt
@@ -1093,6 +1095,8 @@ model BudgetRevisionHistory {
   newHours       Float
   previousCost   Decimal      @db.Decimal(18, 4)
   newCost        Decimal      @db.Decimal(18, 4)
+  previousInternalCost Decimal  @default(0) @db.Decimal(18, 4)
+  newInternalCost      Decimal  @default(0) @db.Decimal(18, 4)
   reason         String       @db.Text
 
   budgetId       String
@@ -1441,12 +1445,14 @@ model BudgetRequest {
   organizationId String
   requestedHours Float
   reason         String?
+  rejectionReason String?
   status         String   @default("PENDING") // PENDING, APPROVED, REJECTED
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task           Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
 
   @@index([projectId])
   @@index([userId])

@@ -9,7 +9,7 @@ export const allocateProjectBudget = async (req: AuthenticatedRequest, res: Resp
   try {
     // 🟢 FIX: Added 'tasks' here so it is extracted from the frontend payload!
     const { projectId, totalAllocatedHours, tasks, members } = req.body;
-    const organizationId = req.user!.organizationId;
+    const organizationId = req.user!.organizationId!;
 
     // 🟢 FIX: Passed 'tasks' into the sync service method
     const result = await projectBudgetService.syncProjectAllocations(
@@ -35,7 +35,7 @@ export const allocateProjectBudget = async (req: AuthenticatedRequest, res: Resp
 export const createProjectBudget = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const budget = await projectBudgetService.createProjectBudget(
-      req.user!.organizationId,
+      req.user!.organizationId!,
       req.body
     );
     res.status(201).json({ success: true, data: budget });
@@ -48,7 +48,7 @@ export const getProjectBudget = async (req: AuthenticatedRequest, res: Response,
   try {
     const { projectId } = req.params;
     const budget = await projectBudgetService.getProjectBudget(
-      req.user!.organizationId,
+      req.user!.organizationId!,
       projectId
     );
     res.status(200).json({ success: true, data: budget });
@@ -61,7 +61,7 @@ export const updateProjectBudget = async (req: AuthenticatedRequest, res: Respon
   try {
     const { id } = req.params;
     const budget = await projectBudgetService.updateProjectBudget(
-      req.user!.organizationId,
+      req.user!.organizationId!,
       id,
       req.body
     );
@@ -75,7 +75,7 @@ export const allocateMemberBudget = async (req: AuthenticatedRequest, res: Respo
   try {
     const { budgetId } = req.params;
     const allocation = await projectBudgetService.allocateMemberBudget(
-      req.user!.organizationId,
+      req.user!.organizationId!,
       budgetId,
       req.body
     );
@@ -89,7 +89,7 @@ export const updateMemberBudget = async (req: AuthenticatedRequest, res: Respons
   try {
     const { memberBudgetId } = req.params;
     const allocation = await projectBudgetService.updateMemberBudget(
-      req.user!.organizationId,
+      req.user!.organizationId!,
       memberBudgetId,
       req.body
     );
@@ -103,7 +103,7 @@ export const allocateTaskBudget = async (req: AuthenticatedRequest, res: Respons
   try {
     const { memberBudgetId } = req.params;
     const allocation = await projectBudgetService.allocateTaskBudget(
-      req.user!.organizationId,
+      req.user!.organizationId!,
       memberBudgetId,
       req.body
     );
@@ -117,7 +117,7 @@ export const updateTaskBudget = async (req: AuthenticatedRequest, res: Response,
   try {
     const { taskBudgetId } = req.params;
     const allocation = await projectBudgetService.updateTaskBudget(
-      req.user!.organizationId,
+      req.user!.organizationId!,
       taskBudgetId,
       req.body
     );

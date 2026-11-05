@@ -1,6 +1,6 @@
 import prisma from '../../lib/prisma';
 import { AppError } from '../../utils/errors';
-import { UpdateInvoiceStatusBody } from './update-invoice-status.schema';
+import { UpdateInvoiceStatusBody } from './schemas/update-invoice-status.schema';
 
 export const updateInvoiceStatusService = async (
   id: string,

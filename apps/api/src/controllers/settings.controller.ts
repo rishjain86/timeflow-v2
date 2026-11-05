@@ -11,21 +11,42 @@ export interface AuthenticatedRequest extends Request {
   };
 }
 
+// Settings are stored directly on the Organization row.
+const SETTINGS_SELECT = {
+  id: true,
+  companyName: true,
+  logoUrl: true,
+  address: true,
+  phone: true,
+  email: true,
+  website: true,
+  defaultCurrency: true,
+  taxRate: true,
+  invoicePrefix: true,
+  dueDays: true,
+  invoiceNotes: true,
+  footerText: true,
+  defaultHourlyRate: true,
+  timeZone: true,
+  dateFormat: true,
+  timeFormat: true,
+  language: true,
+  theme: true,
+  notificationsOn: true,
+} as const;
+
 export const getSettings = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { organizationId } = req.user;
 
-    let settings = await prisma.setting.findUnique({
-      where: { organizationId },
+    const settings = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: SETTINGS_SELECT,
     });
 
-    // If settings don't exist for the organization, create default settings
     if (!settings) {
-      settings = await prisma.setting.create({
-        data: {
-          organizationId,
-        },
-      });
+      res.status(404).json({ success: false, message: 'Organization not found' });
+      return;
     }
 
     res.status(200).json({ success: true, data: settings });
@@ -39,17 +60,15 @@ export const updateSettings = async (req: AuthenticatedRequest, res: Response, n
     const validatedData = updateSettingsSchema.parse({ body: req.body });
     const { id: userId, organizationId } = req.user;
 
-    const existingSettings = await prisma.setting.findUnique({
-      where: { organizationId },
+    const existingSettings = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: SETTINGS_SELECT,
     });
 
-    const updatedSettings = await prisma.setting.upsert({
-      where: { organizationId },
-      update: validatedData.body,
-      create: {
-        organizationId,
-        ...validatedData.body,
-      },
+    const updatedSettings = await prisma.organization.update({
+      where: { id: organizationId },
+      data: validatedData.body,
+      select: SETTINGS_SELECT,
     });
 
     await logAudit({

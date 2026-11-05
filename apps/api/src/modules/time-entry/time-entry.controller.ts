@@ -102,7 +102,7 @@ export const updateTimeEntry = async (
       id,
       organizationId,
       userId,
-      validatedData.body
+      validatedData.body as timeEntryService.UpdateTimeEntryDTO
     );
 
     res.status(200).json({

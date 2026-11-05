@@ -1,131 +1,43 @@
-import { Request, Response, NextFunction } from 'express';
-// Path fix: './schemas/budget.schema' ko './budget.schema' kar diya
-import {
-  createBudgetSchema,
-  updateBudgetSchema,
-  getBudgetsQuerySchema,
-  budgetIdParamSchema,
-} from './budget.schema';
-import * as budgetService from './budget.service';
-import { CustomError } from '../../utils/errors';
+import { z } from 'zod';
+import { BudgetStatus } from '@prisma/client';
 
-export interface AuthenticatedRequest extends Request {
-  user: {
-    id: string;
-    organizationId: string;
-    role: string;
-  };
-}
+const idParams = z.object({
+  id: z.string().uuid({ message: 'Invalid budget ID format' }),
+});
 
-export const createBudget = async (
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const validatedData = createBudgetSchema.parse({ body: req.body });
-    const { organizationId } = req.user;
+const hours = z.number().min(0, 'Hours cannot be negative');
+const money = z.number().min(0, 'Amount cannot be negative');
 
-    const budget = await budgetService.createBudget(
-      organizationId,
-      validatedData.body
-    );
+export const createBudgetSchema = z.object({
+  body: z.object({
+    fundingSourceId: z.string().uuid({ message: 'Invalid funding source ID format' }),
+    approvedHours: hours.optional(),
+    approvedCost: money.optional(),
+    internalCostBudget: money.optional(),
+    autoAllocateOverage: z.boolean().optional(),
+    status: z.nativeEnum(BudgetStatus).optional(),
+  }),
+});
 
-    res.status(201).json({
-      success: true,
-      message: 'Budget created successfully',
-      data: budget,
-    });
-  } catch (error) {
-    if (error instanceof CustomError) {
-      res.status(error.statusCode).json({ success: false, message: error.message });
-      return;
-    }
-    next(error);
-  }
-};
+export const updateBudgetSchema = z.object({
+  params: idParams,
+  body: z.object({
+    approvedHours: hours.optional(),
+    approvedCost: money.optional(),
+    internalCostBudget: money.optional(),
+    autoAllocateOverage: z.boolean().optional(),
+    status: z.nativeEnum(BudgetStatus).optional(),
+    reason: z.string().trim().optional(),
+  }),
+});
 
-export const updateBudget = async (
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const validatedData = updateBudgetSchema.parse({
-      params: req.params,
-      body: req.body,
-    });
-    const { id } = validatedData.params;
-    
-    // We extract BOTH organizationId and userId (required for the revision history audit trail)
-    const { organizationId, id: userId } = req.user; 
+export const getBudgetsQuerySchema = z.object({
+  query: z.object({
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+    fundingSourceId: z.string().uuid().optional(),
+    status: z.nativeEnum(BudgetStatus).optional(),
+  }),
+});
 
-    const budget = await budgetService.updateBudget(
-      id,
-      organizationId,
-      userId,
-      validatedData.body
-    );
-
-    res.status(200).json({
-      success: true,
-      message: 'Budget updated successfully',
-      data: budget,
-    });
-  } catch (error) {
-    if (error instanceof CustomError) {
-      res.status(error.statusCode).json({ success: false, message: error.message });
-      return;
-    }
-    next(error);
-  }
-};
-
-export const getBudgets = async (
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const validatedQuery = getBudgetsQuerySchema.parse({ query: req.query });
-    const { organizationId } = req.user;
-
-    const result = await budgetService.getBudgets(
-      organizationId,
-      validatedQuery.query as budgetService.GetBudgetsQuery
-    );
-
-    res.status(200).json({
-      success: true,
-      data: result.data,
-      meta: result.meta,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const getBudgetById = async (
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const validatedData = budgetIdParamSchema.parse({ params: req.params });
-    const { id } = validatedData.params;
-    const { organizationId } = req.user;
-
-    const budget = await budgetService.getBudgetById(id, organizationId);
-
-    res.status(200).json({
-      success: true,
-      data: budget,
-    });
-  } catch (error) {
-    if (error instanceof CustomError) {
-      res.status(error.statusCode).json({ success: false, message: error.message });
-      return;
-    }
-    next(error);
-  }
-};
+export const budgetIdParamSchema = z.object({ params: idParams });

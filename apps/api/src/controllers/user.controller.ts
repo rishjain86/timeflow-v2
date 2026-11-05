@@ -27,7 +27,7 @@ const canAssignRole = (currentRole: Role, targetRole: Role): boolean => {
   if (currentRole === Role.SUPER_ADMIN || currentRole === Role.ADMIN) return true;
   
   if (currentRole === Role.MANAGER) {
-    const allowedForManager = [Role.USER, Role.THERAPIST, Role.CONSULTANT, Role.EMPLOYEE, Role.BILLING, Role.FRONT_DESK];
+    const allowedForManager: Role[] = [Role.USER, Role.THERAPIST, Role.CONSULTANT, Role.EMPLOYEE, Role.BILLING, Role.FRONT_DESK];
     return allowedForManager.includes(targetRole);
   }
   

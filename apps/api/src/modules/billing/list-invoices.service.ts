@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../../lib/prisma';
-import { ListInvoicesQuery } from './list-invoices.schema';
+import { ListInvoicesQuery } from './schemas/list-invoices.schema';
 
 export const listInvoicesService = async (
   organizationId: string,

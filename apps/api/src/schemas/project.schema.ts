@@ -58,7 +58,7 @@ export const createProjectSchema = z.object({
 
 export const updateProjectSchema = z.object({
   params: z.object({
-    id: z.string('Invalid project ID format'),
+    id: z.string({ required_error: 'Invalid project ID format', invalid_type_error: 'Invalid project ID format' }),
   }),
   body: z.object({
     // 🟢 FIX: Project Name limit increased from 100 to 500 characters

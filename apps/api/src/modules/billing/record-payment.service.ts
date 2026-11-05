@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../../lib/prisma';
 import { AppError } from '../../utils/errors';
-import { RecordPaymentBody } from './record-payment.schema';
+import { RecordPaymentBody } from './schemas/record-payment.schema';
 
 export const recordPaymentService = async (
   invoiceId: string,

@@ -50,7 +50,6 @@
     "src/modules/attendance/attendance.routes.ts",
     "src/modules/attendance/attendance.service.ts",
     "src/modules/attendance/schemas/attendance.schema.ts",
-    "src/modules/authorization/authorization.service.ts",
     "src/modules/billing/billing.service.ts",
     "src/modules/clinical-notes/clinical-note.controller.ts",
     "src/modules/clinical-notes/clinical-note.routes.ts",

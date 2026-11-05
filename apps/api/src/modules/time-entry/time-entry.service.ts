@@ -30,8 +30,8 @@ export const createTimeEntry = async (
     throw new BadRequestError('Notes (Tx Session Details) are mandatory. Please provide a description of the work done.');
   }
 
-  let cnrDocumentUrl;
-  let attendanceDocumentUrl;
+  let cnrDocumentUrl: string | undefined;
+  let attendanceDocumentUrl: string | undefined;
 
   if (files) {
     const cnr = files['cnrDocument']?.[0];

@@ -20,8 +20,8 @@ export const createNotification = async ({
 }: CreateNotificationParams): Promise<void> => {
   try {
     // Optionally check if user has notificationsOn in settings
-    const settings = await prisma.setting.findUnique({
-      where: { organizationId },
+    const settings = await prisma.organization.findUnique({
+      where: { id: organizationId },
       select: { notificationsOn: true }
     });
 

@@ -72,7 +72,7 @@ export const createTimeEntry = async (
     }
 
     const finalDuration = Number(duration);
-    const finalIsBillable = isBillable === 'false' ? false : Boolean(isBillable ?? true);
+    const finalIsBillable = String(isBillable) === 'false' ? false : Boolean(isBillable ?? true);
 
     const project = await prisma.project.findFirst({
       where: { id: projectId, organizationId, isActive: true },
@@ -357,7 +357,7 @@ export const updateTimeEntry = async (
       throw new BadRequestError('This time entry is already APPROVED and locked. Only an Admin or Manager can modify it.');
     }
 
-    const finalIsBillable = isBillable !== undefined ? (isBillable === 'false' ? false : Boolean(isBillable)) : existingTimeEntry.isBillable;
+    const finalIsBillable = isBillable !== undefined ? (String(isBillable) === 'false' ? false : Boolean(isBillable)) : existingTimeEntry.isBillable;
     const finalDuration = duration !== undefined ? Number(duration) : Number(existingTimeEntry.duration);
 
     let appliedRate: number | null = null;
@@ -406,7 +406,7 @@ export const updateTimeEntry = async (
       data: {
         projectId,
         taskId: taskId === null ? null : taskId,
-        date: parsedDate,
+        date: parsedDate ?? undefined,
         duration: finalDuration,
         description,
         isBillable: finalIsBillable,
@@ -644,6 +644,10 @@ export const createBudgetRequest = async (
 
     if (!userId || !organizationId) {
        throw new UnauthorizedError('Unauthorized');
+    }
+
+    if (!projectId) {
+      throw new BadRequestError('projectId is required');
     }
 
     const hours = Number(requestedHours);

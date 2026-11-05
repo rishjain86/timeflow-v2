@@ -1,11 +1,2 @@
-export class AuthorizationService {
-  static async create() { return {}; }
-  static async update() { return {}; }
-  static async delete() { return {}; }
-  static async get() { return {}; }
-  static async getAll() { return []; }
-  static async find() { return []; }
-  static async findOne() { return {}; }
-}
-export const authorizationService = new AuthorizationService();
-export default AuthorizationService;
+// The implementation lives in ../authorization.service.ts; this file keeps the import path used by the controller.
+export * from '../authorization.service';

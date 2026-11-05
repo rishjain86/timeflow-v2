@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../../lib/prisma';
-import { GenerateInvoicesBody } from './generate-invoice.schema';
+import { GenerateInvoicesBody } from './schemas/generate-invoice.schema';
 import { AppError } from '../../utils/errors';
 import { calculateBillingAmount } from '../../utils/billing.utils';
 
@@ -116,13 +116,10 @@ export const generateInvoicesService = async (
       totalProcessedAmount = totalProcessedAmount.add(invoiceTotal);
 
       // ATOMIC INCREMENT FOR SEQUENCE
-      const updatedSetting = await tx.setting.upsert({
-        where: { organizationId },
-        update: { lastInvoiceSeq: { increment: 1 } },
-        create: {
-          organizationId,
-          lastInvoiceSeq: 1,
-        },
+      const updatedSetting = await tx.organization.update({
+        where: { id: organizationId },
+        data: { lastInvoiceSeq: { increment: 1 } },
+        select: { invoicePrefix: true, dueDays: true, lastInvoiceSeq: true },
       });
 
       const prefix = updatedSetting.invoicePrefix || 'INV-';

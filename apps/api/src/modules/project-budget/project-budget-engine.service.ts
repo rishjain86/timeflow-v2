@@ -1,6 +1,5 @@
 import { prisma } from '../../config/prisma';
 import { ProjectBudgetStatus, AlertThreshold } from '@prisma/client';
-import { sendNotification } from '../../services/notification.service'; // Implement this as needed
 
 /**
  * Calculates current consumed hours for a Task Budget by querying real time entries.
@@ -30,7 +29,7 @@ const evaluateBudgetHealth = async (
 
   const percentage = (consumed / allocated) * 100;
   
-  let newStatus = ProjectBudgetStatus.HEALTHY;
+  let newStatus: ProjectBudgetStatus = ProjectBudgetStatus.HEALTHY;
   if (percentage >= 100) newStatus = ProjectBudgetStatus.EXHAUSTED;
   else if (percentage >= 90) newStatus = ProjectBudgetStatus.NEAR_EXHAUSTION;
   else if (percentage >= 75) newStatus = ProjectBudgetStatus.WARNING;
@@ -77,7 +76,7 @@ export const recalculateProjectBudget = async (organizationId: string, projectId
     const taskRemaining = Math.max(0, taskAllocated - actualTaskConsumption);
     const taskPercentage = taskAllocated > 0 ? (actualTaskConsumption / taskAllocated) * 100 : 0;
     
-    let taskStatus = ProjectBudgetStatus.HEALTHY;
+    let taskStatus: ProjectBudgetStatus = ProjectBudgetStatus.HEALTHY;
     if (taskPercentage >= 100) taskStatus = ProjectBudgetStatus.EXHAUSTED;
     else if (taskPercentage >= 90) taskStatus = ProjectBudgetStatus.NEAR_EXHAUSTION;
     else if (taskPercentage >= 75) taskStatus = ProjectBudgetStatus.WARNING;
