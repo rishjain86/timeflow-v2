@@ -9,9 +9,10 @@ export const validate = (schema: AnyZodObject) => async (req: Request, res: Resp
       params: req.params,
     });
 
-    req.body = validatedData.body;
-    req.query = validatedData.query;
-    req.params = validatedData.params;
+    // Only overwrite the parts the schema actually describes. A schema with just `body` must not wipe req.params / req.query.
+    if (validatedData.body !== undefined) req.body = validatedData.body;
+    if (validatedData.query !== undefined) req.query = validatedData.query;
+    if (validatedData.params !== undefined) req.params = validatedData.params;
 
     next();
   } catch (error) {

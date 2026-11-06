@@ -48,6 +48,8 @@ async function login(email, password) {
   return token;
 }
 
+const h = (r) => h(r) + (r.status >= 400 && r.json && r.json.message ? ' - ' + r.json.message : '');
+
 const arrayIn = (json) => {
   const c = [json && json.data && json.data.data, json && json.data, json && json.data && json.data.items];
   return c.find(Array.isArray) || [];
@@ -81,14 +83,14 @@ async function createStaff(adminToken, label, role, stamp) {
 
   const mgrToken = await login(mgr.email, mgr.password);
   const esc = await call('POST', '/clients', mgrToken, { firstName: 'Evil', displayName: 'Evil Admin', email: `evil-${stamp}@example.com`, role: 'SUPER_ADMIN' });
-  check('a manager can NOT create a SUPER_ADMIN (privilege escalation blocked)', esc.status === 403, 'HTTP ' + esc.status);
+  check('a manager can NOT create a SUPER_ADMIN (privilege escalation blocked)', esc.status === 403, h(esc));
   const badRole = await call('POST', '/clients', admin, { firstName: 'X', displayName: 'Bad Role', email: `bad-${stamp}@example.com`, role: 'NOT_A_ROLE' });
-  check('an invalid role is rejected', badRole.status === 400, 'HTTP ' + badRole.status);
+  check('an invalid role is rejected', badRole.status === 400, h(badRole));
 
   // ---------- clinical setup ----------
   const sc = await call('POST', '/service-codes', admin, { code: `SMK${stamp}`, defaultRate: 100 });
   const serviceCodeId = sc.json && sc.json.data && sc.json.data.id;
-  check('service code created', sc.status === 201 && !!serviceCodeId, 'HTTP ' + sc.status);
+  check('service code created', sc.status === 201 && !!serviceCodeId, h(sc));
 
   const p1 = await call('POST', '/therapists', admin, { userId: t1.userId });
   const p2 = await call('POST', '/therapists', admin, { userId: t2.userId });
@@ -103,7 +105,7 @@ async function createStaff(adminToken, label, role, stamp) {
     startTime: start.toISOString(), endTime: end.toISOString(),
   });
   const apptId = ap.json && ap.json.data && ap.json.data.id;
-  check('appointment created', ap.status === 201 && !!apptId, 'HTTP ' + ap.status + (apptId ? '' : ' ' + JSON.stringify(ap.json)));
+  check('appointment created', ap.status === 201 && !!apptId, h(ap) + (apptId ? '' : ' ' + JSON.stringify(ap.json)));
   if (!apptId) throw new Error('Cannot continue without an appointment');
 
   const tok1 = await login(t1.email, t1.password);
@@ -112,24 +114,24 @@ async function createStaff(adminToken, label, role, stamp) {
   // ---------- least privilege ----------
   const l1 = await call('GET', '/appointments', tok1);
   const l2 = await call('GET', '/appointments', tok2);
-  check('therapist 1 sees their own appointment', arrayIn(l1.json).some((a) => a.id === apptId), 'HTTP ' + l1.status);
-  check('therapist 2 sees NONE of therapist 1\'s appointments', !arrayIn(l2.json).some((a) => a.id === apptId), 'HTTP ' + l2.status);
+  check('therapist 1 sees their own appointment', arrayIn(l1.json).some((a) => a.id === apptId), h(l1));
+  check('therapist 2 sees NONE of therapist 1\'s appointments', !arrayIn(l2.json).some((a) => a.id === apptId), h(l2));
   const g2 = await call('GET', `/appointments/${apptId}`, tok2);
-  check('therapist 2 cannot open therapist 1\'s appointment (404)', g2.status === 404, 'HTTP ' + g2.status);
+  check('therapist 2 cannot open therapist 1\'s appointment (404)', g2.status === 404, h(g2));
   const c2 = await call('POST', `/appointments/${apptId}/cnr`, tok2, { notes: 'intruder', therapistSigned: true });
-  check('therapist 2 cannot write notes on it (404)', c2.status === 404, 'HTTP ' + c2.status);
+  check('therapist 2 cannot write notes on it (404)', c2.status === 404, h(c2));
   const r2 = await call('GET', `/appointments/${apptId}/cnr`, tok2);
-  check('therapist 2 cannot read its notes (404)', r2.status === 404, 'HTTP ' + r2.status);
+  check('therapist 2 cannot read its notes (404)', r2.status === 404, h(r2));
   const re = await call('POST', '/appointments', tok2, {
     clientId: patient.clientId, therapistId: profile1, serviceCodeId,
     startTime: new Date(start.getTime() + 5 * 3600 * 1000).toISOString(), endTime: new Date(start.getTime() + 6 * 3600 * 1000).toISOString(),
   });
-  check('therapist 2 cannot schedule on therapist 1\'s calendar (403)', re.status === 403, 'HTTP ' + re.status);
+  check('therapist 2 cannot schedule on therapist 1\'s calendar (403)', re.status === 403, h(re));
 
   // ---------- encryption, signing, locking ----------
   const SECRET = 'SMOKE secret clinical note ' + stamp;
   const w = await call('POST', `/appointments/${apptId}/cnr`, tok1, { notes: SECRET, therapistSigned: true, clientSigned: false });
-  check('therapist 1 saves a clinical note', w.status === 200 || w.status === 201, 'HTTP ' + w.status);
+  check('therapist 1 saves a clinical note', w.status === 200 || w.status === 201, h(w));
 
   const raw = await prisma.clinicalNoteReview.findUnique({ where: { appointmentId: apptId } });
   if (process.env.PHI_ENCRYPTION_KEY) {
@@ -138,18 +140,18 @@ async function createStaff(adminToken, label, role, stamp) {
     console.log('SKIP  encryption check (PHI_ENCRYPTION_KEY is not set in apps/api/.env)');
   }
   const rd = await call('GET', `/appointments/${apptId}/cnr`, tok1);
-  check('owner reads the note back decrypted', rd.json && rd.json.data && rd.json.data.notes === SECRET, 'HTTP ' + rd.status);
+  check('owner reads the note back decrypted', rd.json && rd.json.data && rd.json.data.notes === SECRET, h(rd));
 
   const ap1 = await call('PATCH', `/appointments/${apptId}/cnr/approve`, admin, { isApproved: true });
-  check('manager/admin approves the signed note', ap1.status === 200, 'HTTP ' + ap1.status);
+  check('manager/admin approves the signed note', ap1.status === 200, h(ap1));
   check('approval response does not leak the note text', !!ap1.json && !JSON.stringify(ap1.json).includes('secret'));
   const lock = await call('POST', `/appointments/${apptId}/cnr`, tok1, { notes: 'edit after approval', therapistSigned: true });
-  check('approved note is LOCKED against edits (409)', lock.status === 409, 'HTTP ' + lock.status);
+  check('approved note is LOCKED against edits (409)', lock.status === 409, h(lock));
 
   const a1 = await call('POST', `/appointments/${apptId}/attendance`, tok1, { therapistSigned: true, clientSigned: true });
-  check('attendance saved', a1.status === 200 || a1.status === 201, 'HTTP ' + a1.status);
+  check('attendance saved', a1.status === 200 || a1.status === 201, h(a1));
   const a2 = await call('POST', `/appointments/${apptId}/attendance`, tok1, { therapistSigned: true, clientSigned: true, status: 'ABSENT' });
-  check('fully signed attendance is LOCKED (409)', a2.status === 409, 'HTTP ' + a2.status);
+  check('fully signed attendance is LOCKED (409)', a2.status === 409, h(a2));
 
   // ---------- audit trail ----------
   await new Promise((r) => setTimeout(r, 800));
