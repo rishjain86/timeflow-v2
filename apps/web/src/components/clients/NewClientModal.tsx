@@ -53,7 +53,12 @@ export function NewClientModal({ isOpen, onClose }: NewClientModalProps) {
     createClient(
       formData,
       {
-        onSuccess: () => {
+        onSuccess: (created: any) => {
+          if (created?.temporaryPassword) {
+            alert(
+              `Account created for ${formData.email}.\n\nOne-time temporary password:\n${created.temporaryPassword}\n\nCopy it now and share it securely. It will not be shown again.`
+            );
+          }
           setFormData({ firstName: '', lastName: '', displayName: '', email: '', phone: '', role: isHealthcare ? 'THERAPIST' : 'EMPLOYEE' });
           onClose();
         },
@@ -88,7 +93,7 @@ export function NewClientModal({ isOpen, onClose }: NewClientModalProps) {
           <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 flex items-start gap-3">
             <ShieldCheck className="w-5 h-5 text-primary shrink-0 mt-0.5" />
             <p className="text-xs text-primary leading-relaxed">
-              Adding a {isHealthcare ? 'Case Owner' : 'Client'} here will automatically create their team login account with the default password <strong>Password123!</strong>
+              Adding a {isHealthcare ? 'Case Owner' : 'Client'} here will automatically create their team login account with a <strong>one-time temporary password</strong> that is shown once after creation.
             </p>
           </div>
 

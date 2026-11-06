@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 import { prisma } from '../config/prisma';
 import { ProjectStatus } from '@prisma/client';
@@ -724,7 +725,7 @@ export const importProjects = async (
           if (!workerUser) {
             const randomString = Math.random().toString(36).substring(2, 7);
             const email = `${firstName.toLowerCase().replace(/[^a-z0-9]/g, '')}.${lastName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'worker'}.${randomString}@company.local`;
-            const passwordHash = await bcrypt.hash('Password123!', 10);
+            const passwordHash = await bcrypt.hash(crypto.randomBytes(24).toString('base64url'), 10);
             
             workerUser = await prisma.user.create({
               data: {

@@ -1,11 +1,21 @@
 import { Request, Response, NextFunction } from 'express';
 import { Prisma, Role } from '@prisma/client';
 import { prisma } from '../config/prisma';
-import { NotFoundError, UnauthorizedError, ConflictError } from '../utils/errors';
+import { NotFoundError, UnauthorizedError, ConflictError, ForbiddenError } from '../utils/errors';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 
 // 🟢 THE FIX: Added SUPER_ADMIN to the access permissions to prevent 401 Unauthorized logouts
 const hasManagerAccess = (role: string | Role) => ['SUPER_ADMIN', 'ADMIN', 'MANAGER'].includes(String(role));
+
+// Which roles an actor may hand out. Prevents a manager from minting admins / super admins.
+const MANAGER_ASSIGNABLE: Role[] = [Role.USER, Role.THERAPIST, Role.BILLING, Role.FRONT_DESK, Role.EMPLOYEE, Role.CONSULTANT];
+const canAssignRole = (actor: string | Role, target: Role): boolean => {
+  if (actor === Role.SUPER_ADMIN) return true;
+  if (actor === Role.ADMIN) return target !== Role.SUPER_ADMIN;
+  if (actor === Role.MANAGER) return MANAGER_ASSIGNABLE.includes(target);
+  return false;
+};
 
 export const createClient = async (
   req: Request<unknown, unknown, any>,
@@ -21,6 +31,15 @@ export const createClient = async (
 
     const { firstName, lastName, displayName, email, phone, role: assignRole } = req.body;
 
+    const targetRole = (assignRole || 'THERAPIST') as Role;
+    if (!Object.values(Role).includes(targetRole)) {
+      res.status(400).json({ success: false, message: 'Invalid role.' });
+      return;
+    }
+    if (!canAssignRole(role, targetRole)) {
+      throw new ForbiddenError('You are not allowed to assign this role.');
+    }
+
     if (!email) {
       res.status(400).json({ success: false, message: 'Email is required to create a team account.' });
       return;
@@ -34,7 +53,9 @@ export const createClient = async (
     }
 
     const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash('Password123!', salt);
+    // Random one-time password (returned once in the response) instead of a shared, guessable default.
+    const temporaryPassword = crypto.randomBytes(12).toString('base64url');
+    const passwordHash = await bcrypt.hash(temporaryPassword, salt);
     const clientName = displayName || `${firstName} ${lastName}`.trim();
 
     // Create both Client and User simultaneously
@@ -55,7 +76,7 @@ export const createClient = async (
           email,
           phone: phone || "0000000000",
           passwordHash,
-          role: assignRole || 'THERAPIST',
+          role: targetRole,
           requirePasswordChange: true,
           organizationId,
         },
@@ -67,7 +88,7 @@ export const createClient = async (
     res.status(201).json({
       success: true,
       message: 'Client and Team Account created successfully',
-      data: { client: newClient },
+      data: { client: newClient, temporaryPassword },
     });
   } catch (error) {
     next(error);
