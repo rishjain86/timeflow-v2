@@ -22,7 +22,7 @@ function make(example, target, replacements) {
   console.log(`create ${target}`);
 }
 
-make('apps/api/.env.example', 'apps/api/.env', { JWT_SECRET: secret() });
+make('apps/api/.env.example', 'apps/api/.env', { JWT_SECRET: secret(), PHI_ENCRYPTION_KEY: crypto.randomBytes(32).toString('base64') });
 make('apps/web/.env.example', 'apps/web/.env.local', { NEXTAUTH_SECRET: secret() });
 
 console.log('\nNext: open apps/api/.env and paste your NEW database URL into DATABASE_URL.');

@@ -4,9 +4,9 @@ import { GetTherapistsFilters } from './therapist.service';
 
 // Schemas ko schemas folder se import kiya gaya hai
 import {
-  createTherapistProfileSchema,
-  updateTherapistProfileSchema,
-  getTherapistProfilesQuerySchema,
+  createTherapistSchema as createTherapistProfileSchema,
+  updateTherapistSchema as updateTherapistProfileSchema,
+  getTherapistsQuerySchema as getTherapistProfilesQuerySchema,
   therapistIdParamSchema,
 } from './schemas/therapist.schema';
 

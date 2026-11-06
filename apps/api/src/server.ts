@@ -36,6 +36,11 @@ import projectBudgetRoutes from './modules/project-budget/project-budget.routes'
 
 // 🟢 Billing Routes Import
 import billingRoutes from './modules/billing/billing.routes';
+import appointmentRoutes from './modules/appointment/appointment.routes';
+import therapistRoutes from './modules/therapist/therapist.routes';
+import serviceCodeRoutes from './modules/service-code/service-code.routes';
+import { phiGuard } from './middleware/phi-guard.middleware';
+import { assertPhiKeyConfigured } from './utils/phi-crypto';
 
 // Middlewares and Utils
 import { errorHandler } from './middleware/errorHandler'; 
@@ -260,6 +265,12 @@ app.use('/api/v1/budgets', budgetRoutes);
 
 app.use('/api/v1/project-budgets', projectBudgetRoutes);
 app.use('/api/v1/billing', billingRoutes);
+
+// Healthcare modules (protected health information: no-store caching + audited access)
+assertPhiKeyConfigured();
+app.use('/api/v1/appointments', phiGuard('APPOINTMENT'), appointmentRoutes);
+app.use('/api/v1/therapists', phiGuard('THERAPIST_PROFILE'), therapistRoutes);
+app.use('/api/v1/service-codes', serviceCodeRoutes);
 
 // Public Health Check Route for UptimeRobot
 app.get('/api/health', (req: Request, res: Response) => {

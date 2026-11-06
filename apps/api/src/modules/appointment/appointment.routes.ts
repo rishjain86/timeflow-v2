@@ -62,6 +62,14 @@ router.post(
   appointmentController.submitCNR
 );
 
+// Read Clinical Notes (own caseload for therapists; every access is audited)
+router.get(
+  '/:id/cnr',
+  requireRole([Role.SUPER_ADMIN, Role.ADMIN, Role.MANAGER, Role.THERAPIST]),
+  validate(appointmentIdParamSchema),
+  appointmentController.getCNR
+);
+
 // Approve Clinical Notes (Manager/Admin only)
 router.patch(
   '/:id/cnr/approve',

@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../../middleware/auth.middleware';
-import { CustomError } from '../../utils/errors';
+import { CustomError, ForbiddenError } from '../../utils/errors';
+import { assertAppointmentAccess, resolveTherapistScope } from './appointment.access';
 import * as appointmentService from './appointment.service';
 import { GetAppointmentsFilters } from './appointment.service';
 import {
@@ -20,7 +21,11 @@ export const createAppointment = async (
 ): Promise<void> => {
   try {
     const validatedData = createAppointmentSchema.parse({ body: req.body });
-    const organizationId = req.user!.organizationId;
+    const organizationId = req.user!.organizationId!;
+    const scope = await resolveTherapistScope(req.user!, organizationId);
+    if (scope && validatedData.body.therapistId !== scope) {
+      throw new ForbiddenError('You can only schedule appointments for yourself');
+    }
 
     const appointment = await appointmentService.createAppointment(
       organizationId, 
@@ -51,8 +56,12 @@ export const updateAppointment = async (
       params: req.params,
       body: req.body,
     });
-    const organizationId = req.user!.organizationId;
+    const organizationId = req.user!.organizationId!;
     const { id } = validatedData.params;
+    const scope = await assertAppointmentAccess(req.user!, organizationId, id);
+    if (scope && validatedData.body.therapistId && validatedData.body.therapistId !== scope) {
+      throw new ForbiddenError('You cannot reassign an appointment to another therapist');
+    }
 
     const appointment = await appointmentService.updateAppointment(
       id, 
@@ -81,7 +90,7 @@ export const getAppointments = async (
 ): Promise<void> => {
   try {
     const validatedQuery = getAppointmentsQuerySchema.parse({ query: req.query });
-    const organizationId = req.user!.organizationId;
+    const organizationId = req.user!.organizationId!;
 
     const filters: GetAppointmentsFilters = {  
       page: validatedQuery.query.page as unknown as number,  
@@ -93,6 +102,8 @@ export const getAppointments = async (
       endDate: validatedQuery.query.endDate as string | undefined,  
     };  
 
+    const scope = await resolveTherapistScope(req.user!, organizationId);
+    if (scope) filters.therapistId = scope; // therapists only ever see their own caseload
     const result = await appointmentService.getAppointments(organizationId, filters);  
       
     res.status(200).json({  
@@ -115,8 +126,9 @@ export const getAppointmentById = async (
 ): Promise<void> => {
   try {
     const validatedData = appointmentIdParamSchema.parse({ params: req.params });
-    const organizationId = req.user!.organizationId;
+    const organizationId = req.user!.organizationId!;
     const { id } = validatedData.params;
+    await assertAppointmentAccess(req.user!, organizationId, id);
 
     const appointment = await appointmentService.getAppointmentById(id, organizationId);  
       
@@ -144,8 +156,9 @@ export const getSessionCard = async (
 ): Promise<void> => {
   try {
     const validatedData = appointmentIdParamSchema.parse({ params: req.params });
-    const organizationId = req.user!.organizationId;
+    const organizationId = req.user!.organizationId!;
     const { id } = validatedData.params;
+    await assertAppointmentAccess(req.user!, organizationId, id);
 
     const sessionCardData = await appointmentService.getSessionCardSummary(id, organizationId);  
       
@@ -174,8 +187,9 @@ export const submitAttendance = async (
   try {
     const validatedData = appointmentIdParamSchema.parse({ params: req.params });
     const validatedBody = attendanceSchema.parse({ body: req.body });
-    const organizationId = req.user!.organizationId;
+    const organizationId = req.user!.organizationId!;
     const { id } = validatedData.params;
+    await assertAppointmentAccess(req.user!, organizationId, id);
 
     const attendance = await appointmentService.submitAttendance(
       id, 
@@ -205,8 +219,9 @@ export const submitCNR = async (
   try {
     const validatedData = appointmentIdParamSchema.parse({ params: req.params });
     const validatedBody = cnrSchema.parse({ body: req.body });
-    const organizationId = req.user!.organizationId;
+    const organizationId = req.user!.organizationId!;
     const { id } = validatedData.params;
+    await assertAppointmentAccess(req.user!, organizationId, id);
 
     const cnr = await appointmentService.submitCNR(
       id, 
@@ -236,8 +251,9 @@ export const approveCNR = async (
   try {
     const validatedData = appointmentIdParamSchema.parse({ params: req.params });
     const validatedBody = cnrApprovalSchema.parse({ body: req.body });
-    const organizationId = req.user!.organizationId;
+    const organizationId = req.user!.organizationId!;
     const { id } = validatedData.params;
+    await assertAppointmentAccess(req.user!, organizationId, id);
 
     const cnr = await appointmentService.approveCNR(
       id, 
@@ -250,6 +266,29 @@ export const approveCNR = async (
       message: 'Clinical notes approval status updated',
       data: cnr,
     });
+  } catch (error) {
+    if (error instanceof CustomError) {
+      res.status(error.statusCode).json({ success: false, message: error.message });
+      return;
+    }
+    next(error);
+  }
+};
+
+export const getCNR = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const validatedData = appointmentIdParamSchema.parse({ params: req.params });
+    const organizationId = req.user!.organizationId!;
+    const { id } = validatedData.params;
+    await assertAppointmentAccess(req.user!, organizationId, id);
+
+    const cnr = await appointmentService.getCNR(id, organizationId);
+
+    res.status(200).json({ success: true, data: cnr });
   } catch (error) {
     if (error instanceof CustomError) {
       res.status(error.statusCode).json({ success: false, message: error.message });

@@ -104,3 +104,6 @@ export const requireRole = (allowedRoles: Role[]) => {
     }
   };
 };
+
+// Alias used by the healthcare route modules
+export const authorize = requireRole;

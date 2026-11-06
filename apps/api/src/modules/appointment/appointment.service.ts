@@ -1,5 +1,6 @@
 import { AppointmentStatus, Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma';
+import { encryptField, decryptField } from '../../utils/phi-crypto';
 import { BadRequestError, NotFoundError, ConflictError } from '../../utils/errors';
 import { 
   CreateAppointmentInput, 
@@ -222,7 +223,7 @@ export const getSessionCardSummary = async (appointmentId: string, organizationI
     include: {
       client: true,
       therapist: {
-        include: { user: true }
+        include: { user: { select: { firstName: true, lastName: true } } }
       },
       serviceCode: true,
       attendance: true,
@@ -313,6 +314,12 @@ export const submitAttendance = async (
   
   if (!appointment) throw new NotFoundError('Appointment not found');
 
+  // A fully signed attendance record is a legal document: it is locked against further edits.
+  const existingAttendance = await prisma.attendance.findUnique({ where: { appointmentId } });
+  if (existingAttendance?.signedAt) {
+    throw new ConflictError('Attendance has been fully signed and is locked.');
+  }
+
   const isFullySigned = data.therapistSigned && data.clientSigned;
 
   return prisma.attendance.upsert({
@@ -347,12 +354,19 @@ export const submitCNR = async (
   
   if (!appointment) throw new NotFoundError('Appointment not found');
 
+  // Approved clinical notes are immutable until a manager reopens them (which is audited).
+  const existingCnr = await prisma.clinicalNoteReview.findUnique({ where: { appointmentId } });
+  if (existingCnr?.isApproved) {
+    throw new ConflictError('This clinical note is approved and locked. A manager must reopen it before it can be changed.');
+  }
+  const aad = `${organizationId}:${appointmentId}`;
+
   const isFullySigned = data.therapistSigned && data.clientSigned;
 
-  return prisma.clinicalNoteReview.upsert({
+  const saved = await prisma.clinicalNoteReview.upsert({
     where: { appointmentId },
     update: {
-      notes: data.notes,
+      notes: encryptField(data.notes, aad),
       therapistSigned: data.therapistSigned,
       clientSigned: data.clientSigned,
       signedAt: isFullySigned ? new Date() : null,
@@ -360,12 +374,13 @@ export const submitCNR = async (
     create: {
       appointmentId,
       organizationId,
-      notes: data.notes,
+      notes: encryptField(data.notes, aad),
       therapistSigned: data.therapistSigned,
       clientSigned: data.clientSigned,
       signedAt: isFullySigned ? new Date() : null,
     }
   });
+  return { ...saved, notes: decryptField(saved.notes, aad) };
 };
 
 export const approveCNR = async (
@@ -381,10 +396,34 @@ export const approveCNR = async (
     throw new NotFoundError('Clinical note not found for this appointment. Please submit CNR first.');
   }
 
+  if (data.isApproved && !cnr.therapistSigned) {
+    throw new BadRequestError('The therapist must sign the clinical note before it can be approved.');
+  }
+  if (data.isApproved && !cnr.notes) {
+    throw new BadRequestError('An empty clinical note cannot be approved.');
+  }
+
   return prisma.clinicalNoteReview.update({
     where: { appointmentId },
     data: {
       isApproved: data.isApproved,
-    }
+    },
+    // Approval responses never include the note text itself.
+    select: {
+      id: true,
+      appointmentId: true,
+      isApproved: true,
+      therapistSigned: true,
+      clientSigned: true,
+      signedAt: true,
+      reviewDate: true,
+    },
   });
+};
+
+// Read a clinical note (decrypted). Access is audited by the PHI guard middleware.
+export const getCNR = async (appointmentId: string, organizationId: string) => {
+  const cnr = await prisma.clinicalNoteReview.findFirst({ where: { appointmentId, organizationId } });
+  if (!cnr) throw new NotFoundError('No clinical note has been submitted for this appointment');
+  return { ...cnr, notes: decryptField(cnr.notes, `${organizationId}:${appointmentId}`) };
 };

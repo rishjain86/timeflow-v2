@@ -26,7 +26,7 @@ router.post(
 // Get all therapist profiles with pagination and filters
 router.get(
   '/',
-  authorize([Role.SUPER_ADMIN, Role.ADMIN, Role.MANAGER, Role.USER]),
+  authorize([Role.SUPER_ADMIN, Role.ADMIN, Role.MANAGER, Role.THERAPIST, Role.FRONT_DESK]),
   validateRequest(getTherapistsQuerySchema),
   therapistController.getTherapistProfiles
 );
@@ -34,7 +34,7 @@ router.get(
 // Get a specific therapist profile by ID
 router.get(
   '/:id',
-  authorize([Role.SUPER_ADMIN, Role.ADMIN, Role.MANAGER, Role.USER]),
+  authorize([Role.SUPER_ADMIN, Role.ADMIN, Role.MANAGER, Role.THERAPIST, Role.FRONT_DESK]),
   validateRequest(therapistIdParamSchema),
   therapistController.getTherapistProfileById
 );
