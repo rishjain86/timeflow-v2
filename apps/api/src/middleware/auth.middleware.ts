@@ -39,7 +39,8 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
             organizationId: true,
             role: true,
             isActive: true, // 🟢 FIX: Fetch isActive
-            isBanned: true  // 🟢 FIX: Fetch isBanned
+            isBanned: true,  // 🟢 FIX: Fetch isBanned
+            requirePasswordChange: true
           }
         }
       }
@@ -60,6 +61,20 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
     
     if (!session.user.isActive) {
       throw new UnauthorizedError('Your account has been deactivated. Contact your administrator.');
+    }
+
+    // Accounts holding a temporary password may only change it (or sign out / read their own profile).
+    if (session.user.requirePasswordChange) {
+      const path = req.originalUrl.split('?')[0];
+      const allowed = ['/api/v1/users/update-password', '/api/v1/auth/logout', '/api/v1/auth/me'];
+      if (!allowed.includes(path)) {
+        res.status(403).json({
+          success: false,
+          code: 'PASSWORD_CHANGE_REQUIRED',
+          message: 'You must change your temporary password before continuing.',
+        });
+        return;
+      }
     }
 
     // 3. Attach FRESH user data to request (Overriding the stale JWT organizationId)

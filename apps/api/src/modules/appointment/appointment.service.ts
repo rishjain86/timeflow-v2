@@ -68,6 +68,7 @@ export const createAppointment = async (
       startTime,
       endTime,
       status: data.status || AppointmentStatus.SCHEDULED,
+      modality: data.modality,
       notes: data.notes,
     },
     include: {
@@ -132,6 +133,7 @@ export const updateAppointment = async (
       startTime: data.startTime ? new Date(data.startTime) : undefined,
       endTime: data.endTime ? new Date(data.endTime) : undefined,
       status: data.status,
+      modality: data.modality,
       notes: data.notes,
     },
     include: {

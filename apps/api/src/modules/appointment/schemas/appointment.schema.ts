@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AppointmentStatus, AttendanceStatus } from '@prisma/client';
+import { AppointmentStatus, AttendanceStatus, AppointmentModality } from '@prisma/client';
 
 // Helper for pagination
 const pageSchema = z.coerce.number().int().min(1).default(1);
@@ -15,6 +15,7 @@ export const createAppointmentSchema = z.object({
       startTime: z.string().datetime({ message: 'Valid ISO datetime required for start time' }),
       endTime: z.string().datetime({ message: 'Valid ISO datetime required for end time' }),
       status: z.nativeEnum(AppointmentStatus).optional(),
+      modality: z.nativeEnum(AppointmentModality).optional(),
       notes: z.string().optional(),
     })
     .refine((data) => new Date(data.startTime) < new Date(data.endTime), {
@@ -35,6 +36,7 @@ export const updateAppointmentSchema = z.object({
       startTime: z.string().datetime().optional(),
       endTime: z.string().datetime().optional(),
       status: z.nativeEnum(AppointmentStatus).optional(),
+      modality: z.nativeEnum(AppointmentModality).optional(),
       notes: z.string().optional(),
     })
     .superRefine((data, ctx) => {

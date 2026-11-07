@@ -50,6 +50,27 @@ async function login(email, password) {
 
 const h = (r) => `HTTP ${r.status}` + (r.status >= 400 && r.json && r.json.message ? ' - ' + r.json.message : '');
 
+const STRONG = 'Smoke!Pass-' + Date.now();
+
+// Logs in with the temporary password, proves the API is blocked until it is changed, then changes it.
+async function rotate(email, tempPassword, label, full) {
+  const token = await login(email, tempPassword);
+  const blocked = await call('GET', '/appointments', token);
+  check(`${label}: temporary password blocks the API until changed`,
+    blocked.status === 403 && blocked.json && blocked.json.code === 'PASSWORD_CHANGE_REQUIRED', h(blocked));
+  if (full) {
+    const weak = await call('PATCH', '/users/update-password', token, { currentPassword: tempPassword, newPassword: 'weak' });
+    check('a weak new password is rejected', weak.status === 400, h(weak));
+    const wrong = await call('PATCH', '/users/update-password', token, { currentPassword: 'not-the-password', newPassword: STRONG });
+    check('a wrong current password is rejected', wrong.status === 400, h(wrong));
+    const same = await call('PATCH', '/users/update-password', token, { currentPassword: tempPassword, newPassword: tempPassword });
+    check('reusing the same password is rejected', same.status === 400, h(same));
+  }
+  const ok = await call('PATCH', '/users/update-password', token, { currentPassword: tempPassword, newPassword: STRONG });
+  check(`${label}: password change succeeds`, ok.status === 200, h(ok));
+  return token;
+}
+
 const arrayIn = (json) => {
   const c = [json && json.data && json.data.data, json && json.data, json && json.data && json.data.items];
   return c.find(Array.isArray) || [];
@@ -81,7 +102,7 @@ async function createStaff(adminToken, label, role, stamp) {
   check('accounts get a random one-time password (not the old default)',
     [t1, t2, patient, mgr].every((u) => u.password && u.password !== 'Password123!'));
 
-  const mgrToken = await login(mgr.email, mgr.password);
+  const mgrToken = await rotate(mgr.email, mgr.password, 'manager', true);
   const esc = await call('POST', '/clients', mgrToken, { firstName: 'Evil', displayName: 'Evil Admin', email: `evil-${stamp}@example.com`, role: 'SUPER_ADMIN' });
   check('a manager can NOT create a SUPER_ADMIN (privilege escalation blocked)', esc.status === 403, h(esc));
   const badRole = await call('POST', '/clients', admin, { firstName: 'X', displayName: 'Bad Role', email: `bad-${stamp}@example.com`, role: 'NOT_A_ROLE' });
@@ -102,14 +123,14 @@ async function createStaff(adminToken, label, role, stamp) {
   const end = new Date(start.getTime() + 45 * 60 * 1000);
   const ap = await call('POST', '/appointments', admin, {
     clientId: patient.clientId, therapistId: profile1, serviceCodeId,
-    startTime: start.toISOString(), endTime: end.toISOString(),
+    startTime: start.toISOString(), endTime: end.toISOString(), modality: 'TELEHEALTH',
   });
   const apptId = ap.json && ap.json.data && ap.json.data.id;
   check('appointment created', ap.status === 201 && !!apptId, h(ap) + (apptId ? '' : ' ' + JSON.stringify(ap.json)));
   if (!apptId) throw new Error('Cannot continue without an appointment');
 
-  const tok1 = await login(t1.email, t1.password);
-  const tok2 = await login(t2.email, t2.password);
+  const tok1 = await rotate(t1.email, t1.password, 'therapist 1', false);
+  const tok2 = await rotate(t2.email, t2.password, 'therapist 2', false);
 
   // ---------- least privilege ----------
   const l1 = await call('GET', '/appointments', tok1);
@@ -127,6 +148,15 @@ async function createStaff(adminToken, label, role, stamp) {
     startTime: new Date(start.getTime() + 5 * 3600 * 1000).toISOString(), endTime: new Date(start.getTime() + 6 * 3600 * 1000).toISOString(),
   });
   check('therapist 2 cannot schedule on therapist 1\'s calendar (403)', re.status === 403, h(re));
+
+  // ---------- provider portal (real data) ----------
+  const sessionsOf = (r) => ((r.json && r.json.data && r.json.data.upcomingAppointments) || []).flatMap((g) => g.sessions);
+  const pa1 = await call('GET', '/provider/appointments', tok1);
+  const mine = sessionsOf(pa1).find((s) => s.id === apptId);
+  check('provider portal: therapist 1 sees their session with real data',
+    !!mine && /Patient Smoke/.test(mine.patientName) && mine.modality === 'Telehealth', h(pa1));
+  const pa2 = await call('GET', '/provider/appointments', tok2);
+  check('provider portal: therapist 2 does not see it', pa2.status === 200 && !sessionsOf(pa2).some((s) => s.id === apptId), h(pa2));
 
   // ---------- encryption, signing, locking ----------
   const SECRET = 'SMOKE secret clinical note ' + stamp;
@@ -153,12 +183,36 @@ async function createStaff(adminToken, label, role, stamp) {
   const a2 = await call('POST', `/appointments/${apptId}/attendance`, tok1, { therapistSigned: true, clientSigned: true, status: 'ABSENT' });
   check('fully signed attendance is LOCKED (409)', a2.status === 409, h(a2));
 
+  // ---------- provider notes worklist: MISSING -> DRAFT -> SIGNED ----------
+  const pastStart = new Date(Date.now() - 26 * 3600 * 1000);
+  const pastEnd = new Date(pastStart.getTime() + 45 * 60 * 1000);
+  const ap2 = await call('POST', '/appointments', admin, {
+    clientId: patient.clientId, therapistId: profile1, serviceCodeId,
+    startTime: pastStart.toISOString(), endTime: pastEnd.toISOString(),
+  });
+  const pastId = ap2.json && ap2.json.data && ap2.json.data.id;
+  check('past appointment created for the notes worklist', ap2.status === 201 && !!pastId, h(ap2));
+  const findNote = (r, list) => ((r.json && r.json.data && r.json.data[list]) || []).find((n) => n.id === pastId);
+  const nA = await call('GET', '/provider/notes', tok1);
+  check('notes worklist: finished session without a note is MISSING', findNote(nA, 'pendingNotes') && findNote(nA, 'pendingNotes').status === 'MISSING', h(nA));
+  await call('POST', `/appointments/${pastId}/cnr`, tok1, { notes: 'draft text', therapistSigned: false });
+  const nB = await call('GET', '/provider/notes', tok1);
+  check('notes worklist: saved but unsigned note is DRAFT', findNote(nB, 'pendingNotes') && findNote(nB, 'pendingNotes').status === 'DRAFT', h(nB));
+  await call('POST', `/appointments/${pastId}/cnr`, tok1, { notes: 'final text', therapistSigned: true });
+  const nC = await call('GET', '/provider/notes', tok1);
+  check('notes worklist: signed note moves to completed as SIGNED', findNote(nC, 'completedNotes') && findNote(nC, 'completedNotes').status === 'SIGNED' && !findNote(nC, 'pendingNotes'), h(nC));
+  check('notes worklist never contains note text', !JSON.stringify(nC.json).includes('final text'));
+  const nD = await call('GET', '/provider/notes', tok2);
+  check('notes worklist: therapist 2 sees none of therapist 1\'s sessions', !findNote(nD, 'pendingNotes') && !findNote(nD, 'completedNotes'), h(nD));
+
   // ---------- audit trail ----------
   await new Promise((r) => setTimeout(r, 800));
   const logs = await prisma.auditLog.findMany({ where: { entityId: apptId } });
   check('PHI reads were audited', logs.some((l) => l.action === 'PHI_VIEW'), logs.length + ' audit rows');
   check('denied attempts were audited', logs.some((l) => l.details && l.details.outcome === 'DENIED_OR_FAILED'));
   check('audit rows contain no note text', !JSON.stringify(logs).includes('secret'));
+
+  console.log(`\nTo look at the provider portal as therapist 1 in the browser: ${t1.email}  /  ${STRONG}`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} checks passed`);

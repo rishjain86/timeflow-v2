@@ -408,6 +408,9 @@ export const deleteUser = async (
   }
 };
 
+// 10-128 chars with upper, lower, digit and symbol.
+const PASSWORD_POLICY = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{10,128}$/;
+
 export const updatePassword = async (
   req: Request,
   res: Response,
@@ -417,8 +420,13 @@ export const updatePassword = async (
     const { id: userId } = res.locals.user;
     const { currentPassword, newPassword } = req.body;
 
-    if (!currentPassword || !newPassword) {
+    if (typeof currentPassword !== 'string' || typeof newPassword !== 'string' || !currentPassword || !newPassword) {
       throw new BadRequestError('Both current password and new password are required');
+    }
+    if (!PASSWORD_POLICY.test(newPassword)) {
+      throw new BadRequestError(
+        'New password must be 10-128 characters and include an uppercase letter, a lowercase letter, a number and a symbol.'
+      );
     }
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
@@ -428,18 +436,41 @@ export const updatePassword = async (
     if (!isPasswordValid) {
       throw new BadRequestError('Incorrect current password. Please try again.');
     }
+    if (currentPassword === newPassword) {
+      throw new BadRequestError('New password must be different from the current password.');
+    }
 
-    const salt = await bcrypt.genSalt(10);
-    const newPasswordHash = await bcrypt.hash(newPassword, salt);
+    const newPasswordHash = await bcrypt.hash(newPassword, 12);
+    const authHeader = req.headers.authorization;
+    const currentToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.substring(7) : '';
 
-    await prisma.user.update({
-      where: { id: userId },
-      data: { passwordHash: newPasswordHash }
-    });
+    await prisma.$transaction([
+      // Clears the "must change temporary password" flag and signs out every OTHER device/session.
+      prisma.user.update({
+        where: { id: userId },
+        data: { passwordHash: newPasswordHash, requirePasswordChange: false },
+      }),
+      prisma.session.deleteMany({ where: { userId, NOT: { sessionToken: currentToken } } }),
+    ]);
+
+    if (user.organizationId) {
+      prisma.auditLog
+        .create({
+          data: {
+            organizationId: user.organizationId,
+            userId,
+            action: 'PASSWORD_CHANGED',
+            entityType: 'USER',
+            entityId: userId,
+            details: { ipAddress: req.ip, otherSessionsRevoked: true },
+          },
+        })
+        .catch((err: unknown) => console.error('[audit] failed to record password change', err));
+    }
 
     res.status(200).json({
       success: true,
-      message: 'Password updated successfully',
+      message: 'Password updated successfully. Other devices have been signed out.',
     });
   } catch (error) {
     next(error);

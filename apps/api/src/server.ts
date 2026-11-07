@@ -39,6 +39,7 @@ import billingRoutes from './modules/billing/billing.routes';
 import appointmentRoutes from './modules/appointment/appointment.routes';
 import therapistRoutes from './modules/therapist/therapist.routes';
 import serviceCodeRoutes from './modules/service-code/service-code.routes';
+import providerPortalRoutes from './modules/provider-portal/provider-portal.routes';
 import { phiGuard } from './middleware/phi-guard.middleware';
 import { assertPhiKeyConfigured } from './utils/phi-crypto';
 
@@ -271,6 +272,7 @@ assertPhiKeyConfigured();
 app.use('/api/v1/appointments', phiGuard('APPOINTMENT'), appointmentRoutes);
 app.use('/api/v1/therapists', phiGuard('THERAPIST_PROFILE'), therapistRoutes);
 app.use('/api/v1/service-codes', serviceCodeRoutes);
+app.use('/api/v1/provider', phiGuard('PROVIDER_PORTAL'), providerPortalRoutes);
 
 // Public Health Check Route for UptimeRobot
 app.get('/api/health', (req: Request, res: Response) => {

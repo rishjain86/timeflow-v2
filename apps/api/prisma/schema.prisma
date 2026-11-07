@@ -162,6 +162,11 @@ enum TherapistStatus {
   ON_LEAVE
 }
 
+enum AppointmentModality {
+  IN_PERSON
+  TELEHEALTH
+}
+
 enum AppointmentStatus {
   SCHEDULED
   COMPLETED
@@ -1200,6 +1205,7 @@ model Appointment {
   startTime       DateTime
   endTime         DateTime
   status          AppointmentStatus @default(SCHEDULED)
+  modality        AppointmentModality @default(IN_PERSON)
   notes           String?           @db.Text
 
   organizationId  String

@@ -440,7 +440,8 @@ export function TopNav() {
     pathname.startsWith('/login') || 
     pathname.startsWith('/register') ||
     pathname.startsWith('/forgot-password') ||
-    pathname.startsWith('/reset-password');
+    pathname.startsWith('/reset-password') ||
+    pathname.startsWith('/change-password');
   
   if (isAuthPage) return null;
   return <TopNavContent />;

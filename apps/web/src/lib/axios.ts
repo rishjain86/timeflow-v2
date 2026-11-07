@@ -41,6 +41,14 @@ axiosInstance.interceptors.request.use(
 axiosInstance.interceptors.response.use(
   (response) => response,
   async (error) => {
+    // Temporary password: send the user to the change-password screen instead of showing broken pages.
+    if (error.response?.status === 403 && error.response?.data?.code === 'PASSWORD_CHANGE_REQUIRED') {
+      if (typeof window !== 'undefined' && window.location.pathname !== '/change-password') {
+        window.location.href = '/change-password';
+      }
+      return Promise.reject(error);
+    }
+
     if (error.response && error.response.status === 401) {
       if (typeof window !== 'undefined') {
         localStorage.removeItem('token');
