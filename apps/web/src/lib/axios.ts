@@ -49,6 +49,14 @@ axiosInstance.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    // Patient accounts are confined to the patient API: send them to their own portal.
+    if (error.response?.status === 403 && error.response?.data?.code === 'PATIENT_SCOPE') {
+      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/patient')) {
+        window.location.href = '/patient';
+      }
+      return Promise.reject(error);
+    }
+
     if (error.response && error.response.status === 401) {
       if (typeof window !== 'undefined') {
         localStorage.removeItem('token');

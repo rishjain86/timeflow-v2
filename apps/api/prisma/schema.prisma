@@ -21,6 +21,7 @@ enum Role {
   FRONT_DESK
   EMPLOYEE
   CONSULTANT
+  PATIENT
 }
 
 enum TokenType {
@@ -326,6 +327,7 @@ model User {
   firstName          String
   lastName           String?
   avatarUrl          String?
+  clientPortal       Client?   @relation("ClientPortalUser")
   
   phone              String          @default("0000000000")
   isBanned           Boolean         @default(false)
@@ -435,6 +437,10 @@ model Client {
   address        String?
   companyName    String?
   isActive       Boolean      @default(true)
+
+  // Optional portal login (role PATIENT) linked to this record
+  userId         String?      @unique
+  user           User?        @relation("ClientPortalUser", fields: [userId], references: [id], onDelete: SetNull)
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)

@@ -77,6 +77,19 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
       }
     }
 
+    // Portal patients may ONLY use the patient API (plus sign-out / profile / password change).
+    // Enforced here so that routes without their own role check can never leak data to a patient.
+    if (session.user.role === 'PATIENT') {
+      const path = req.originalUrl.split('?')[0];
+      const allowed =
+        path.startsWith('/api/v1/patient/') ||
+        ['/api/v1/users/update-password', '/api/v1/auth/logout', '/api/v1/auth/me'].includes(path);
+      if (!allowed) {
+        res.status(403).json({ success: false, code: 'PATIENT_SCOPE', message: 'This area is not available for patient accounts.' });
+        return;
+      }
+    }
+
     // 3. Attach FRESH user data to request (Overriding the stale JWT organizationId)
     const freshUserData = {
       id: decoded.id,

@@ -46,3 +46,11 @@ export const dueLabel = (sessionEnd: Date, now: Date, tz: string): string => {
   }
   return `Overdue by ${Math.max(hours, 1)} Hour${hours <= 1 ? '' : 's'}`;
 };
+
+/** "Thursday, Aug 15, 2026" */
+export const longDay = (d: Date, tz: string): string =>
+  fmt(d, tz, { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+
+/** "Aug 04, 2026" */
+export const shortDate = (d: Date, tz: string): string =>
+  fmt(d, tz, { month: 'short', day: '2-digit', year: 'numeric' });

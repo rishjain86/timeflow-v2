@@ -205,6 +205,67 @@ async function createStaff(adminToken, label, role, stamp) {
   const nD = await call('GET', '/provider/notes', tok2);
   check('notes worklist: therapist 2 sees none of therapist 1\'s sessions', !findNote(nD, 'pendingNotes') && !findNote(nD, 'completedNotes'), h(nD));
 
+  // ---------- patient portal ----------
+  const adminUser = await prisma.user.findUnique({ where: { email: EMAIL } });
+  const orgId = adminUser.organizationId;
+  const portalEmail = `smoke-portal-${stamp}@example.com`;
+  const portalClient = await prisma.client.create({ data: { name: 'Portal Patient Smoke', email: portalEmail, organizationId: orgId } });
+  const noEmailClient = await prisma.client.create({ data: { name: 'No Email Smoke', organizationId: orgId } });
+  const portalStart = new Date(Date.now() + 48 * 3600 * 1000);
+  const apPortal = await call('POST', '/appointments', admin, {
+    clientId: portalClient.id, therapistId: profile1, serviceCodeId,
+    startTime: portalStart.toISOString(), endTime: new Date(portalStart.getTime() + 45 * 60 * 1000).toISOString(),
+  });
+  const portalApptId = apPortal.json && apPortal.json.data && apPortal.json.data.id;
+  check('appointment for the portal patient created', apPortal.status === 201 && !!portalApptId, h(apPortal));
+
+  const mkInvoice = (clientId, status, amount, num) => prisma.invoice.create({
+    data: { invoiceNumber: num, issueDate: new Date(), dueDate: new Date(Date.now() + 7 * 86400000), status,
+      subtotal: amount, totalAmount: amount, balanceDue: amount, clientId, organizationId: orgId },
+  });
+  await mkInvoice(portalClient.id, 'SENT', 150, `SMK-A-${stamp}`);
+  await mkInvoice(portalClient.id, 'DRAFT', 999, `SMK-D-${stamp}`);
+  await mkInvoice(patient.clientId, 'SENT', 777, `SMK-O-${stamp}`);
+
+  const noMail = await call('POST', `/portal-access/${noEmailClient.id}`, admin);
+  check('portal access needs an email on the client (400)', noMail.status === 400, h(noMail));
+  const dup = await call('POST', `/portal-access/${patient.clientId}`, admin);
+  check('portal access refuses an email that already has a login (409)', dup.status === 409, h(dup));
+  const noRight = await call('POST', `/portal-access/${portalClient.id}`, tok1);
+  check('a therapist cannot grant portal access (403)', noRight.status === 403, h(noRight));
+  const grant = await call('POST', `/portal-access/${portalClient.id}`, admin);
+  const grantPw = grant.json && grant.json.data && grant.json.data.temporaryPassword;
+  check('admin grants portal access (one-time password returned)', grant.status === 201 && !!grantPw, h(grant));
+  const ptok = await rotate(portalEmail, grantPw, 'patient', false);
+
+  const pa = await call('GET', '/patient/appointments', ptok);
+  const upc = (pa.json && pa.json.data && pa.json.data.upcoming) || [];
+  check('patient sees their own appointment', upc.some((a) => a.id === portalApptId), h(pa));
+  check('patient sees no other patient\'s appointment', !JSON.stringify(pa.json).includes(apptId));
+  check('appointment shows the provider name, no clinical text', !!upc[0] && /Therapist1/.test(upc[0].provider) && !JSON.stringify(pa.json).includes('secret'));
+  const pb = await call('GET', '/patient/billing', ptok);
+  const invs = (pb.json && pb.json.data && pb.json.data.invoices) || [];
+  check('patient sees their sent invoice', invs.some((i) => i.amount === 150), h(pb));
+  check('patient does NOT see drafts or other patients\' invoices', !invs.some((i) => i.amount === 999 || i.amount === 777));
+  check('outstanding balance is exactly their own', pb.json && pb.json.data && pb.json.data.summary.totalOutstanding === 150);
+
+  const blockedPaths = [
+    ['staff appointments', 'GET', '/appointments'], ['clients', 'GET', '/clients'], ['provider portal', 'GET', '/provider/appointments'],
+    ['clinical notes', 'GET', `/appointments/${apptId}/cnr`], ['client creation', 'POST', '/clients'], ['users', 'GET', '/users'],
+    ['settings', 'GET', '/settings'], ['invoices', 'GET', '/invoices'],
+  ];
+  for (const [name, method, p] of blockedPaths) {
+    const r = await call(method, p, ptok, method === 'POST' ? {} : undefined);
+    check(`patient is blocked from ${name} (403)`, r.status === 403 && r.json && r.json.code === 'PATIENT_SCOPE', h(r));
+  }
+  const staffOnPatient = await call('GET', '/patient/appointments', tok1);
+  check('a therapist cannot use the patient API (403)', staffOnPatient.status === 403, h(staffOnPatient));
+
+  const rev = await call('DELETE', `/portal-access/${portalClient.id}`, admin);
+  check('admin revokes portal access', rev.status === 200, h(rev));
+  const after = await call('GET', '/patient/appointments', ptok);
+  check('revoked patient is signed out immediately (401)', after.status === 401, h(after));
+
   // ---------- audit trail ----------
   await new Promise((r) => setTimeout(r, 800));
   const logs = await prisma.auditLog.findMany({ where: { entityId: apptId } });
