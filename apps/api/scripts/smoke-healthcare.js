@@ -12,10 +12,12 @@ const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
 const API = process.env.SMOKE_API_URL || 'http://localhost:5000/api/v1';
-const EMAIL = process.env.SMOKE_EMAIL;
-const PASSWORD = process.env.SMOKE_PASSWORD;
-if (!EMAIL || !PASSWORD) {
-  console.error('Set SMOKE_EMAIL and SMOKE_PASSWORD (an ADMIN / SUPER_ADMIN account of a healthcare org).');
+let EMAIL = process.env.SMOKE_EMAIL;
+let PASSWORD = process.env.SMOKE_PASSWORD;
+// SMOKE_REGISTER=1 (used by CI) creates a brand-new healthcare organization + owner instead of using existing credentials.
+const SELF_REGISTER = process.env.SMOKE_REGISTER === '1';
+if ((!EMAIL || !PASSWORD) && !SELF_REGISTER) {
+  console.error('Set SMOKE_EMAIL and SMOKE_PASSWORD (an ADMIN / SUPER_ADMIN account of a healthcare org), or SMOKE_REGISTER=1.');
   process.exit(1);
 }
 if (process.env.NODE_ENV === 'production' || /^https:\/\//.test(API) && !/localhost|127\.0\.0\.1/.test(API)) {
@@ -92,6 +94,15 @@ async function createStaff(adminToken, label, role, stamp) {
 
 (async () => {
   const stamp = Date.now();
+  if (!EMAIL || !PASSWORD) {
+    EMAIL = `smoke-admin-${stamp}@example.com`;
+    PASSWORD = `Smoke!Admin-${stamp}`;
+    const reg = await call('POST', '/auth/register', null, {
+      firstName: 'Smoke', lastName: 'Admin', email: EMAIL, password: PASSWORD,
+      organizationName: `Smoke Clinic ${stamp}`, phone: '9999999999', industryType: 'HEALTHCARE',
+    });
+    if (reg.status !== 201) throw new Error('self-registration failed: ' + h(reg));
+  }
   const admin = await login(EMAIL, PASSWORD);
 
   // ---------- account creation hardening ----------
