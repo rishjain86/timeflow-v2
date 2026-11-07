@@ -48,7 +48,7 @@ async function login(email, password) {
   return token;
 }
 
-const h = (r) => h(r) + (r.status >= 400 && r.json && r.json.message ? ' - ' + r.json.message : '');
+const h = (r) => `HTTP ${r.status}` + (r.status >= 400 && r.json && r.json.message ? ' - ' + r.json.message : '');
 
 const arrayIn = (json) => {
   const c = [json && json.data && json.data.data, json && json.data, json && json.data && json.data.items];
