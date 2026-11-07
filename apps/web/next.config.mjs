@@ -1,8 +1,8 @@
+// The API this frontend talks to. Set NEXT_PUBLIC_API_URL per environment; locally it defaults to the dev API.
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -55,7 +55,7 @@ const nextConfig = {
       {
         // Fix: /api/auth ko proxy hone se bachana hai
         source: '/api/:path((?!auth).*)', 
-        destination: 'https://timeflow-erp-1.onrender.com/api/v1/:path*',
+        destination: `${API_URL}/:path*`,
       },
     ];
   },

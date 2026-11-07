@@ -21,7 +21,7 @@ import { useAuthUser } from '@/features/auth/api/get-auth-user';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 
-const backendDomain = 'https://timeflow-erp-4fh3.onrender.com';
+const backendDomain = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1').replace(/\/api\/v1\/?$/, '');
 
 const getSafeArray = (data: any, key1: string, key2: string) => {
   if (!data) return [];
