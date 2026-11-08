@@ -277,6 +277,48 @@ async function createStaff(adminToken, label, role, stamp) {
   const after = await call('GET', '/patient/appointments', ptok);
   check('revoked patient is signed out immediately (401)', after.status === 401, h(after));
 
+  // ---------- authentication hardening ----------
+  const rawLogin = (email, password) => call('POST', '/auth/login', null, { email, password });
+
+  const lk = await createStaff(admin, 'Locky', 'THERAPIST', stamp);
+  const wrongs = [];
+  for (let i = 0; i < 5; i++) wrongs.push((await rawLogin(lk.email, 'wrong-password-' + i)).status);
+  check('five wrong passwords are each rejected (401)', wrongs.every((x) => x === 401), wrongs.join(','));
+  const locked = await rawLogin(lk.email, lk.password);
+  check('the account is then LOCKED, even for the correct password (429)', locked.status === 429, h(locked));
+
+  const unk = await rawLogin(`nobody-${stamp}@example.com`, 'whatever');
+  check('an unknown email gets the same generic message', unk.status === 401 && /Invalid email or password/.test((unk.json && unk.json.message) || ''), h(unk));
+  const revWrong = await rawLogin(portalEmail, 'wrong-password');
+  check('a deactivated account does not reveal its status without the password',
+    revWrong.status === 401 && /Invalid email or password/.test((revWrong.json && revWrong.json.message) || ''), h(revWrong));
+  const revRight = await rawLogin(portalEmail, STRONG);
+  check('...but the real owner is told it is deactivated', revRight.status === 401 && /deactivated/i.test((revRight.json && revRight.json.message) || ''), h(revRight));
+
+  const weakReg = await call('POST', '/auth/register', null, {
+    firstName: 'Weak', lastName: 'Pass', email: `weak-${stamp}@example.com`, password: '12345678',
+    organizationName: 'Weak Org', phone: '9999999999', industryType: 'HEALTHCARE',
+  });
+  check('registration rejects a weak password (400)', weakReg.status === 400, h(weakReg));
+
+  const shape = await rawLogin(EMAIL, PASSWORD);
+  const su = (shape.json && shape.json.data && shape.json.data.user) || {};
+  const secretKeys = ['passwordHash', 'verificationCode', 'verificationCodeExpiry', 'resetPasswordToken', 'resetPasswordTokenExpiry', 'failedLoginAttempts', 'lockedUntil'];
+  check('login response contains no OTP, reset token or lockout fields', shape.status === 200 && !secretKeys.some((k) => k in su), h(shape));
+
+  // The reset-password takeover: a missing token must not match "any user with a pending reset".
+  await prisma.user.update({ where: { id: t2.userId }, data: { resetPasswordToken: 'x'.repeat(64), resetPasswordTokenExpiry: new Date(Date.now() + 600000) } });
+  const hashBefore = (await prisma.user.findUnique({ where: { id: t2.userId } })).passwordHash;
+  const noTok = await call('POST', '/auth/reset-password', null, { newPassword: 'Another!Passw0rd' });
+  const hashAfter = (await prisma.user.findUnique({ where: { id: t2.userId } })).passwordHash;
+  check('reset-password without a token is rejected and changes nobody\'s password', noTok.status === 400 && hashBefore === hashAfter, h(noTok));
+  const weakReset = await call('POST', '/auth/reset-password', null, { token: 'x'.repeat(64), newPassword: 'weak' });
+  check('reset-password enforces the password policy (400)', weakReset.status === 400, h(weakReset));
+
+  await prisma.session.updateMany({ where: { sessionToken: mgrToken }, data: { lastActivityAt: new Date(Date.now() - 3 * 3600 * 1000) } });
+  const idle = await call('GET', '/appointments', mgrToken);
+  check('an idle session is expired (401)', idle.status === 401 && /inactivity/i.test((idle.json && idle.json.message) || ''), h(idle));
+
   // ---------- audit trail ----------
   await new Promise((r) => setTimeout(r, 800));
   const logs = await prisma.auditLog.findMany({ where: { entityId: apptId } });

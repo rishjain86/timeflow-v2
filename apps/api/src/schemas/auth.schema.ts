@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { strongPassword } from '../utils/password-policy';
 import { Role, IndustryType } from '@prisma/client'; // 🟢 Added IndustryType for SaaS
 
 export const registerSchema = z.object({
@@ -6,7 +7,7 @@ export const registerSchema = z.object({
     firstName: z.string().trim().min(2, 'First name must be at least 2 characters'),
     lastName: z.string().trim().min(2, 'Last name must be at least 2 characters'),
     email: z.string().trim().toLowerCase().email('Invalid email address'),
-    password: z.string().min(8, 'Password must be at least 8 characters'),
+    password: strongPassword,
     organizationName: z.string().trim().min(2, 'Organization name must be at least 2 characters'),
     // 🟢 NEW: Mandatory Phone Number for Owner
     phone: z.string().min(10, 'Valid phone number is required'),
@@ -36,7 +37,7 @@ export const inviteUserSchema = z.object({
 export const acceptInviteSchema = z.object({
   body: z.object({
     token: z.string().min(1, 'Invitation token is required'),
-    password: z.string().min(8, 'Password must be at least 8 characters'),
+    password: strongPassword,
     phone: z.string().min(10, 'Valid phone number is required'),
   }),
 });

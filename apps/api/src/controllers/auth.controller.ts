@@ -5,7 +5,8 @@ import crypto from 'crypto';
 import { Role, Prisma, TokenType } from '@prisma/client';
 import { prisma } from '../config/prisma';
 import { env } from '../config/env';
-import { ConflictError, UnauthorizedError, NotFoundError, BadRequestError } from '../utils/errors';
+import { AppError, ConflictError, UnauthorizedError, NotFoundError, BadRequestError } from '../utils/errors';
+import { PASSWORD_POLICY_REGEX, PASSWORD_POLICY_MESSAGE } from '../utils/password-policy';
 import { RegisterInput, LoginInput, InviteUserInput, AcceptInviteInput, ManageUserInput } from '../schemas/auth.schema';
 
 // 🟢 NEW: Import Email Services for OTP & Forgot Password
@@ -29,6 +30,28 @@ const generateToken = (userId: string, role: Role, organizationId: string) => {
 
 // Helper: Generate 6-digit OTP
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
+
+// Never send secrets (OTP, reset tokens, lockout state) back to the browser.
+const SENSITIVE_USER_FIELDS = [
+  'passwordHash',
+  'verificationCode',
+  'verificationCodeExpiry',
+  'resetPasswordToken',
+  'resetPasswordTokenExpiry',
+  'failedLoginAttempts',
+  'lockedUntil',
+] as const;
+
+const toSafeUser = <T extends Record<string, any>>(user: T): Omit<T, (typeof SENSITIVE_USER_FIELDS)[number]> => {
+  const copy: Record<string, any> = { ...user };
+  for (const key of SENSITIVE_USER_FIELDS) delete copy[key];
+  return copy as Omit<T, (typeof SENSITIVE_USER_FIELDS)[number]>;
+};
+
+const MAX_FAILED_LOGINS = 5;
+const LOCKOUT_MINUTES = 15;
+// A valid bcrypt hash used only to make "unknown email" take as long as "wrong password".
+const DUMMY_HASH = '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy';
 
 export const register = async (
   req: Request<unknown, unknown, RegisterInput>,
@@ -97,7 +120,7 @@ export const register = async (
       }
     });
 
-    const { passwordHash: _, ...userWithoutPassword } = user;
+    const userWithoutPassword = toSafeUser(user);
 
     res.status(201).json({
       success: true,
@@ -129,32 +152,61 @@ export const login = async (
   try {
     const { email, password } = req.body;
 
-    const user = await prisma.user.findUnique({ 
+    const user = await prisma.user.findUnique({
       where: { email },
-      include: { organization: true } 
+      include: { organization: true },
     });
-    
+
+    // Do the same amount of work for unknown emails so response time does not reveal which accounts exist.
     if (!user) {
+      await bcrypt.compare(password, DUMMY_HASH);
       throw new UnauthorizedError('Invalid email or password');
     }
 
-    // 🟢 QUICK FIX: Commenting this out temporarily until Frontend OTP UI is built
-    /*
-    if (!user.isVerified) {
-      throw new UnauthorizedError('Please verify your email to log in. Check your inbox for the OTP.');
-    }
-    */
-
-    if (user.isBanned) {
-      throw new UnauthorizedError('Your account has been banned by the Administrator.');
-    }
-    if (!user.isActive) {
-      throw new UnauthorizedError('Your account has been deactivated. Please check your email for an invitation.');
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
+      throw new AppError('Too many failed sign-in attempts. Please try again in a few minutes.', 429);
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
     if (!isPasswordValid) {
+      const updated = await prisma.user.update({
+        where: { id: user.id },
+        data: { failedLoginAttempts: { increment: 1 } },
+        select: { failedLoginAttempts: true },
+      });
+      if (updated.failedLoginAttempts >= MAX_FAILED_LOGINS) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { lockedUntil: new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000), failedLoginAttempts: 0 },
+        });
+        if (user.organizationId) {
+          prisma.auditLog
+            .create({
+              data: {
+                organizationId: user.organizationId,
+                userId: user.id,
+                action: 'ACCOUNT_LOCKED',
+                entityType: 'USER',
+                entityId: user.id,
+                details: { reason: 'too many failed sign-ins', ipAddress: req.ip },
+              },
+            })
+            .catch(() => undefined);
+        }
+      }
       throw new UnauthorizedError('Invalid email or password');
+    }
+
+    // The account status is only revealed once the password has been proven correct.
+    if (user.isBanned) {
+      throw new UnauthorizedError('Your account has been banned by the Administrator.');
+    }
+    if (!user.isActive) {
+      throw new UnauthorizedError('Your account has been deactivated. Please contact your administrator.');
+    }
+
+    if (user.failedLoginAttempts > 0 || user.lockedUntil) {
+      await prisma.user.update({ where: { id: user.id }, data: { failedLoginAttempts: 0, lockedUntil: null } });
     }
 
     const token = generateToken(user.id, user.role, user.organizationId);
@@ -169,7 +221,7 @@ export const login = async (
       }
     });
 
-    const { passwordHash: _, ...userWithoutPassword } = user;
+    const userWithoutPassword = toSafeUser(user);
 
     res.status(200).json({
       success: true,
@@ -280,6 +332,14 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
   try {
     const { token, newPassword } = req.body;
 
+    // IMPORTANT: Prisma ignores filters whose value is `undefined`, so a missing token must never reach the query.
+    if (typeof token !== 'string' || token.length < 32) {
+      throw new BadRequestError('Invalid or expired reset token.');
+    }
+    if (typeof newPassword !== 'string' || !PASSWORD_POLICY_REGEX.test(newPassword)) {
+      throw new BadRequestError(PASSWORD_POLICY_MESSAGE);
+    }
+
     const user = await prisma.user.findFirst({
       where: {
         resetPasswordToken: token,
@@ -346,7 +406,7 @@ export const getCurrentUser = async (req: Request, res: Response, next: NextFunc
       throw new NotFoundError('User not found');
     }
 
-    const { passwordHash: _, ...userWithoutPassword } = user;
+    const userWithoutPassword = toSafeUser(user);
 
     res.status(200).json({
       success: true,

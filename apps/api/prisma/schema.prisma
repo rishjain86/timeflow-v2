@@ -328,6 +328,8 @@ model User {
   lastName           String?
   avatarUrl          String?
   clientPortal       Client?   @relation("ClientPortalUser")
+  failedLoginAttempts Int      @default(0)
+  lockedUntil        DateTime?
   
   phone              String          @default("0000000000")
   isBanned           Boolean         @default(false)
@@ -406,6 +408,7 @@ model Session {
   expires      DateTime
   ipAddress    String?
   userAgent    String?
+  lastActivityAt DateTime @default(now())
 
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 

@@ -13,6 +13,7 @@ const envSchema = z.object({
   REDIS_URL: z.string().url().optional(),
   FRONTEND_URL: z.string().optional(),
   PHI_ENCRYPTION_KEY: z.string().optional(),
+  SESSION_IDLE_TIMEOUT_MINUTES: z.string().optional(),
   CORS_ORIGIN: z.string().optional(),
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.string().optional(),

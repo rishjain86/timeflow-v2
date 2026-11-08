@@ -50,6 +50,18 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
       throw new UnauthorizedError('Session expired or invalid. Please login again.');
     }
 
+    // Idle timeout: protected health information must not stay reachable from an abandoned session.
+    const idleLimitMs = (Number(process.env.SESSION_IDLE_TIMEOUT_MINUTES) || 60) * 60 * 1000;
+    const idleForMs = Date.now() - session.lastActivityAt.getTime();
+    if (idleForMs > idleLimitMs) {
+      await prisma.session.delete({ where: { id: session.id } }).catch(() => undefined);
+      throw new UnauthorizedError('Your session timed out due to inactivity. Please sign in again.');
+    }
+    if (idleForMs > 60 * 1000) {
+      // Refresh at most once a minute to keep database writes low.
+      prisma.session.update({ where: { id: session.id }, data: { lastActivityAt: new Date() } }).catch(() => undefined);
+    }
+
     if (!session.user) {
       throw new UnauthorizedError('User account no longer exists.');
     }

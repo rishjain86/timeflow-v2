@@ -26,7 +26,12 @@ const registerSchema = z.object({
   lastName: z.string().trim().min(2, 'Last name is required'),
   email: z.string().email('Invalid email address'),
   phone: z.string().min(10, 'Valid phone number is required'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  password: z
+    .string()
+    .regex(
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{10,128}$/,
+      'Use 10+ characters with an uppercase letter, a lowercase letter, a number and a symbol'
+    ),
   organizationName: z.string().min(2, 'Company or Workspace name is required'),
   industryType: z.enum(['GENERAL', 'HEALTHCARE']).default('GENERAL'),
 });
