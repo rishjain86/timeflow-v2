@@ -271,6 +271,9 @@ app.use('/api/v1/billing', billingRoutes);
 
 // Healthcare modules (protected health information: no-store caching + audited access)
 assertPhiKeyConfigured();
+if (!process.env.NODE_ENV) {
+  console.warn('[config] NODE_ENV is not set. Error details are hidden; set NODE_ENV=production on the server.');
+}
 app.use('/api/v1/appointments', phiGuard('APPOINTMENT'), appointmentRoutes);
 app.use('/api/v1/therapists', phiGuard('THERAPIST_PROFILE'), therapistRoutes);
 app.use('/api/v1/service-codes', serviceCodeRoutes);

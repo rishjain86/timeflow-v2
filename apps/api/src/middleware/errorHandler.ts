@@ -45,6 +45,7 @@ export const errorHandler = (
     }
   }
 
+  // Details are only shown when NODE_ENV is EXPLICITLY 'development'. An unset NODE_ENV must never leak internals.
   const requestId = res.locals.requestId || 'N/A';
 
   // Log based on severity
@@ -63,7 +64,7 @@ export const errorHandler = (
   // Construct response payload with strict types
   const responsePayload: ErrorResponse = {
     success: false,
-    message: isOperational || env.NODE_ENV === 'development' ? message : 'Internal Server Error',
+    message: isOperational || process.env.NODE_ENV === 'development' ? message : 'Internal Server Error',
     requestId,
   };
 
@@ -73,7 +74,7 @@ export const errorHandler = (
   }
 
   // Include stack trace only in development mode
-  if (env.NODE_ENV === 'development') {
+  if (process.env.NODE_ENV === 'development') {
     responsePayload.stack = err.stack;
   }
 
