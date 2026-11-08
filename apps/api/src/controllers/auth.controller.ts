@@ -23,7 +23,10 @@ const generateToken = (userId: string, role: Role, organizationId: string) => {
       expiresIn: '1d',
       algorithm: 'HS256',
       issuer: 'timeflow-api',
-      audience: 'timeflow-web'
+      audience: 'timeflow-web',
+      // Unique id per token. Without it, two logins by the same user within the same second produce identical
+      // tokens and violate the unique constraint on sessions.sessionToken (HTTP 500).
+      jwtid: crypto.randomUUID(),
     }
   );
 };
