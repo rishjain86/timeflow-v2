@@ -1,6 +1,9 @@
 import axios from 'axios';
 import { getSession, signOut } from 'next-auth/react';
 
+// Guards against firing signOut() once per failed request (a burst of 401s used to cause a request storm).
+let signingOut = false;
+
 export const axiosInstance = axios.create({
   // URL seedha environment variable se uthao
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1', 
@@ -60,12 +63,17 @@ axiosInstance.interceptors.response.use(
     if (error.response && error.response.status === 401) {
       if (typeof window !== 'undefined') {
         localStorage.removeItem('token');
-        
-        // Loop break karne ka RAMBAAN ilaaj: 
-        // Agar pehle se login page par nahi hai, tabhi bahar nikalo
-        if (window.location.pathname !== '/login') {
-          // Ye NextAuth ki cookie bhi uda dega aur proper login page par bhejega
-          await signOut({ callbackUrl: '/login' });
+
+        // Sign out exactly once, even if many requests fail with 401 at the same time.
+        if (window.location.pathname !== '/login' && !signingOut) {
+          signingOut = true;
+          try {
+            // Clears the NextAuth cookie and sends the user to the login page
+            await signOut({ callbackUrl: '/login' });
+          } catch (_) {
+            // If the auth endpoint itself is unreachable, don't loop - just go to the login page.
+            window.location.href = '/login';
+          }
         }
       }
     }
