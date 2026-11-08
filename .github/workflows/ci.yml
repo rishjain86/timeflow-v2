@@ -83,6 +83,8 @@ jobs:
           echo "API did not become healthy"; cat api.log; exit 1
       - name: Smoke test
         run: pnpm --filter @timeflow/api exec node scripts/smoke-healthcare.js
+      - name: Tenant isolation test (organization B must never reach organization A's data)
+        run: pnpm --filter @timeflow/api exec node scripts/smoke-tenant-isolation.js
       - name: API log (on failure)
         if: failure()
         run: tail -n 150 api.log || true
