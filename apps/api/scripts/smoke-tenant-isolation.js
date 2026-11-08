@@ -40,7 +40,7 @@ async function newOrg(label, stamp) {
   const email = `tenant-${label.toLowerCase()}-${stamp}@example.com`;
   const password = `Tenant!${label}-${stamp}`;
   const reg = await call('POST', '/auth/register', null, {
-    firstName: label, lastName: 'Owner', email, password,
+    firstName: `Org${label}`, lastName: 'Owner', email, password,
     organizationName: `Tenant ${label} ${stamp}`, phone: '9999999999', industryType: 'HEALTHCARE',
   });
   if (reg.status !== 201) throw new Error(`register ${label} failed: ${h(reg)}`);
