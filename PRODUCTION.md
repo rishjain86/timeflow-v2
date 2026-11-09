@@ -14,6 +14,7 @@ Work through this top to bottom the first time you deploy. Nothing here is optio
 ## 2. Database (Neon)
 - [ ] Create a **new** Neon project for production (separate from development). Use the pooled connection string.
 - [ ] Turn on point-in-time recovery / backups and test a restore once.
+- [ ] Put the API in the **same region** as the Neon database (round trips of 200-300 ms between continents make every request, and every multi-query transaction, slow and can cause "Unable to start a transaction" timeouts).
 - [ ] Deploys run `prisma migrate deploy` (never `db push`). Every schema change needs a committed migration - CI fails if one is missing.
 
 ## 3. API (Render, or any Node host)
