@@ -327,7 +327,7 @@ model User {
   firstName          String
   lastName           String?
   avatarUrl          String?
-  clientPortal       Client?   @relation("ClientPortalUser")
+  patientCases       Project[] @relation("ProjectPatientUser")
   failedLoginAttempts Int      @default(0)
   lockedUntil        DateTime?
   
@@ -441,10 +441,6 @@ model Client {
   companyName    String?
   isActive       Boolean      @default(true)
 
-  // Optional portal login (role PATIENT) linked to this record
-  userId         String?      @unique
-  user           User?        @relation("ClientPortalUser", fields: [userId], references: [id], onDelete: SetNull)
-
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
@@ -490,6 +486,11 @@ model Project {
   assignedToId         String?
   assignedTo           User?         @relation("ProjectAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
 
+  // Healthcare: clean patient name (the display `name` is a long stitched string) and the patient's optional portal login
+  patientName    String?
+  patientUserId  String?
+  patientUser    User?         @relation("ProjectPatientUser", fields: [patientUserId], references: [id], onDelete: SetNull)
+
   // Project-specific hourly billing rate
   hourlyRate     Decimal?      @db.Decimal(18, 4)
 
@@ -509,6 +510,7 @@ model Project {
   expenses       Expense[]
   attachments    Attachment[]
   comments       Comment[]
+  appointments   Appointment[]
 
   // SPRINT 1: Healthcare Budgeting & Funding Relations
   authorizations Authorization[]
@@ -525,6 +527,7 @@ model Project {
   @@index([organizationId])
   @@index([clientId])
   @@index([assignedToId])
+  @@index([patientUserId])
   @@map("projects")
 }
 
@@ -1220,8 +1223,12 @@ model Appointment {
   organizationId  String
   organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  clientId        String
-  client          Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  // The CASE (project) is the patient. The client is the payor and is optional here (defaults from the case).
+  projectId       String?
+  project         Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  clientId        String?
+  client          Client?           @relation(fields: [clientId], references: [id], onDelete: SetNull)
 
   therapistId     String
   therapist       TherapistProfile  @relation(fields: [therapistId], references: [id], onDelete: Restrict)
@@ -1239,6 +1246,7 @@ model Appointment {
 
   @@index([organizationId])
   @@index([clientId])
+  @@index([projectId])
   @@index([therapistId])
   @@index([status])
   @@index([startTime])

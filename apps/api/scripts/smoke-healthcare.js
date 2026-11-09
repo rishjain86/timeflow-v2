@@ -104,14 +104,21 @@ async function createStaff(adminToken, label, role, stamp) {
     if (reg.status !== 201) throw new Error('self-registration failed: ' + h(reg));
   }
   const admin = await login(EMAIL, PASSWORD);
+  const adminUser = await prisma.user.findUnique({ where: { email: EMAIL } });
+  const orgId = adminUser.organizationId;
+  // In this product the PATIENT is the CASE (project); the client row is the payor.
+  const mkCase = (label) => prisma.project.create({
+    data: { name: `${label} ${stamp} - HCAI 1234 - OT TX`, patientName: `${label} ${stamp}`, organizationId: orgId },
+  });
 
   // ---------- account creation hardening ----------
   const t1 = await createStaff(admin, 'Therapist1', 'THERAPIST', stamp);
   const t2 = await createStaff(admin, 'Therapist2', 'THERAPIST', stamp);
-  const patient = await createStaff(admin, 'Patient', 'USER', stamp);
+  const payor = await createStaff(admin, 'Payor', 'USER', stamp);
+  const caseMain = await mkCase('Smoke Patient');
   const mgr = await createStaff(admin, 'Manager', 'MANAGER', stamp);
   check('accounts get a random one-time password (not the old default)',
-    [t1, t2, patient, mgr].every((u) => u.password && u.password !== 'Password123!'));
+    [t1, t2, payor, mgr].every((u) => u.password && u.password !== 'Password123!'));
 
   const mgrToken = await rotate(mgr.email, mgr.password, 'manager', true);
   const esc = await call('POST', '/clients', mgrToken, { firstName: 'Evil', displayName: 'Evil Admin', email: `evil-${stamp}@example.com`, role: 'SUPER_ADMIN' });
@@ -133,7 +140,7 @@ async function createStaff(adminToken, label, role, stamp) {
   const start = new Date(Date.now() + 24 * 3600 * 1000);
   const end = new Date(start.getTime() + 45 * 60 * 1000);
   const ap = await call('POST', '/appointments', admin, {
-    clientId: patient.clientId, therapistId: profile1, serviceCodeId,
+    projectId: caseMain.id, therapistId: profile1, serviceCodeId,
     startTime: start.toISOString(), endTime: end.toISOString(), modality: 'TELEHEALTH',
   });
   const apptId = ap.json && ap.json.data && ap.json.data.id;
@@ -155,7 +162,7 @@ async function createStaff(adminToken, label, role, stamp) {
   const r2 = await call('GET', `/appointments/${apptId}/cnr`, tok2);
   check('therapist 2 cannot read its notes (404)', r2.status === 404, h(r2));
   const re = await call('POST', '/appointments', tok2, {
-    clientId: patient.clientId, therapistId: profile1, serviceCodeId,
+    projectId: caseMain.id, therapistId: profile1, serviceCodeId,
     startTime: new Date(start.getTime() + 5 * 3600 * 1000).toISOString(), endTime: new Date(start.getTime() + 6 * 3600 * 1000).toISOString(),
   });
   check('therapist 2 cannot schedule on therapist 1\'s calendar (403)', re.status === 403, h(re));
@@ -165,7 +172,7 @@ async function createStaff(adminToken, label, role, stamp) {
   const pa1 = await call('GET', '/provider/appointments', tok1);
   const mine = sessionsOf(pa1).find((s) => s.id === apptId);
   check('provider portal: therapist 1 sees their session with real data',
-    !!mine && /Patient Smoke/.test(mine.patientName) && mine.modality === 'Telehealth', h(pa1));
+    !!mine && /Smoke Patient/.test(mine.patientName) && mine.modality === 'Telehealth', h(pa1));
   const pa2 = await call('GET', '/provider/appointments', tok2);
   check('provider portal: therapist 2 does not see it', pa2.status === 200 && !sessionsOf(pa2).some((s) => s.id === apptId), h(pa2));
 
@@ -198,7 +205,7 @@ async function createStaff(adminToken, label, role, stamp) {
   const pastStart = new Date(Date.now() - 26 * 3600 * 1000);
   const pastEnd = new Date(pastStart.getTime() + 45 * 60 * 1000);
   const ap2 = await call('POST', '/appointments', admin, {
-    clientId: patient.clientId, therapistId: profile1, serviceCodeId,
+    projectId: caseMain.id, therapistId: profile1, serviceCodeId,
     startTime: pastStart.toISOString(), endTime: pastEnd.toISOString(),
   });
   const pastId = ap2.json && ap2.json.data && ap2.json.data.id;
@@ -216,35 +223,33 @@ async function createStaff(adminToken, label, role, stamp) {
   const nD = await call('GET', '/provider/notes', tok2);
   check('notes worklist: therapist 2 sees none of therapist 1\'s sessions', !findNote(nD, 'pendingNotes') && !findNote(nD, 'completedNotes'), h(nD));
 
-  // ---------- patient portal ----------
-  const adminUser = await prisma.user.findUnique({ where: { email: EMAIL } });
-  const orgId = adminUser.organizationId;
+  // ---------- patient portal (the patient is the CASE) ----------
   const portalEmail = `smoke-portal-${stamp}@example.com`;
-  const portalClient = await prisma.client.create({ data: { name: 'Portal Patient Smoke', email: portalEmail, organizationId: orgId } });
-  const noEmailClient = await prisma.client.create({ data: { name: 'No Email Smoke', organizationId: orgId } });
+  const portalCase = await mkCase('Portal Patient');
+  const dupCase = await mkCase('Second Case');
   const portalStart = new Date(Date.now() + 48 * 3600 * 1000);
   const apPortal = await call('POST', '/appointments', admin, {
-    clientId: portalClient.id, therapistId: profile1, serviceCodeId,
+    projectId: portalCase.id, therapistId: profile1, serviceCodeId,
     startTime: portalStart.toISOString(), endTime: new Date(portalStart.getTime() + 45 * 60 * 1000).toISOString(),
   });
   const portalApptId = apPortal.json && apPortal.json.data && apPortal.json.data.id;
-  check('appointment for the portal patient created', apPortal.status === 201 && !!portalApptId, h(apPortal));
+  check('appointment for the portal patient\'s case created', apPortal.status === 201 && !!portalApptId, h(apPortal));
 
-  const mkInvoice = (clientId, status, amount, num) => prisma.invoice.create({
+  const mkInvoice = (projectId, status, amount, num) => prisma.invoice.create({
     data: { invoiceNumber: num, issueDate: new Date(), dueDate: new Date(Date.now() + 7 * 86400000), status,
-      subtotal: amount, totalAmount: amount, balanceDue: amount, clientId, organizationId: orgId },
+      subtotal: amount, totalAmount: amount, balanceDue: amount, clientId: payor.clientId, projectId, organizationId: orgId },
   });
-  await mkInvoice(portalClient.id, 'SENT', 150, `SMK-A-${stamp}`);
-  await mkInvoice(portalClient.id, 'DRAFT', 999, `SMK-D-${stamp}`);
-  await mkInvoice(patient.clientId, 'SENT', 777, `SMK-O-${stamp}`);
+  await mkInvoice(portalCase.id, 'SENT', 150, `SMK-A-${stamp}`);
+  await mkInvoice(portalCase.id, 'DRAFT', 999, `SMK-D-${stamp}`);
+  await mkInvoice(caseMain.id, 'SENT', 777, `SMK-O-${stamp}`);
 
-  const noMail = await call('POST', `/portal-access/${noEmailClient.id}`, admin);
-  check('portal access needs an email on the client (400)', noMail.status === 400, h(noMail));
-  const dup = await call('POST', `/portal-access/${patient.clientId}`, admin);
-  check('portal access refuses an email that already has a login (409)', dup.status === 409, h(dup));
-  const noRight = await call('POST', `/portal-access/${portalClient.id}`, tok1);
+  const noMail = await call('POST', `/portal-access/${portalCase.id}`, admin, {});
+  check('portal access needs the patient\'s email (400)', noMail.status === 400, h(noMail));
+  const dup = await call('POST', `/portal-access/${dupCase.id}`, admin, { email: t1.email });
+  check('portal access refuses an email that belongs to a staff login (409)', dup.status === 409, h(dup));
+  const noRight = await call('POST', `/portal-access/${portalCase.id}`, tok1, { email: portalEmail });
   check('a therapist cannot grant portal access (403)', noRight.status === 403, h(noRight));
-  const grant = await call('POST', `/portal-access/${portalClient.id}`, admin);
+  const grant = await call('POST', `/portal-access/${portalCase.id}`, admin, { email: portalEmail });
   const grantPw = grant.json && grant.json.data && grant.json.data.temporaryPassword;
   check('admin grants portal access (one-time password returned)', grant.status === 201 && !!grantPw, h(grant));
   const ptok = await rotate(portalEmail, grantPw, 'patient', false);
@@ -272,8 +277,15 @@ async function createStaff(adminToken, label, role, stamp) {
   const staffOnPatient = await call('GET', '/patient/appointments', tok1);
   check('a therapist cannot use the patient API (403)', staffOnPatient.status === 403, h(staffOnPatient));
 
-  const rev = await call('DELETE', `/portal-access/${portalClient.id}`, admin);
-  check('admin revokes portal access', rev.status === 200, h(rev));
+  // A second case of the same patient reuses the existing login.
+  const link2 = await call('POST', `/portal-access/${dupCase.id}`, admin, { email: portalEmail });
+  check('a second case for the same patient reuses their login (no new password)',
+    link2.status === 201 && link2.json && link2.json.data && link2.json.data.temporaryPassword === null, h(link2));
+  const rev0 = await call('DELETE', `/portal-access/${dupCase.id}`, admin);
+  const stillIn = await call('GET', '/patient/appointments', ptok);
+  check('revoking one case keeps the login while another case remains', rev0.status === 200 && stillIn.status === 200, h(rev0) + ' / ' + h(stillIn));
+  const rev = await call('DELETE', `/portal-access/${portalCase.id}`, admin);
+  check('revoking the last case deactivates the login', rev.status === 200 && rev.json && rev.json.data && rev.json.data.loginDeactivated === true, h(rev));
   const after = await call('GET', '/patient/appointments', ptok);
   check('revoked patient is signed out immediately (401)', after.status === 401, h(after));
 

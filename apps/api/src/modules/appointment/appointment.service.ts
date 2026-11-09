@@ -14,6 +14,7 @@ export interface GetAppointmentsFilters {
   page: number;
   limit: number;
   clientId?: string;
+  projectId?: string;
   therapistId?: string;
   status?: AppointmentStatus;
   startDate?: string;
@@ -25,15 +26,26 @@ export const createAppointment = async (
   data: CreateAppointmentInput
 ) => {
   // 1. Verify all relationships exist and belong to the organization
-  const [client, therapist, serviceCode] = await Promise.all([
-    prisma.client.findFirst({ where: { id: data.clientId, organizationId } }),
+  const [project, therapist, serviceCode] = await Promise.all([
+    prisma.project.findFirst({
+      where: { id: data.projectId, organizationId, isActive: true },
+      select: { id: true, clientId: true },
+    }),
     prisma.therapistProfile.findFirst({ where: { id: data.therapistId, organizationId } }),
     prisma.serviceCode.findFirst({ where: { id: data.serviceCodeId, organizationId } }),
   ]);
 
-  if (!client) throw new NotFoundError('Client not found in your organization');
+  if (!project) throw new NotFoundError('Case not found in your organization');
   if (!therapist) throw new NotFoundError('Therapist not found in your organization');
   if (!serviceCode) throw new NotFoundError('Service code not found in your organization');
+
+  // The payor defaults to the case's payor; an explicitly supplied payor must belong to this organization.
+  let payorId: string | undefined = project.clientId ?? undefined;
+  if (data.clientId) {
+    const payor = await prisma.client.findFirst({ where: { id: data.clientId, organizationId }, select: { id: true } });
+    if (!payor) throw new NotFoundError('Payor not found in your organization');
+    payorId = payor.id;
+  }
 
   const startTime = new Date(data.startTime);
   const endTime = new Date(data.endTime);
@@ -62,7 +74,8 @@ export const createAppointment = async (
   return prisma.appointment.create({
     data: {
       organizationId,
-      clientId: data.clientId,
+      projectId: project.id,
+      clientId: payorId,
       therapistId: data.therapistId,
       serviceCodeId: data.serviceCodeId,
       startTime,
@@ -73,6 +86,7 @@ export const createAppointment = async (
     },
     include: {
       client: { select: { id: true, name: true, email: true } },
+      project: { select: { id: true, name: true, patientName: true } },
       therapist: {
         include: { user: { select: { firstName: true, lastName: true } } },
       },
@@ -138,6 +152,7 @@ export const updateAppointment = async (
     },
     include: {
       client: { select: { id: true, name: true } },
+      project: { select: { id: true, name: true, patientName: true } },
       therapist: { include: { user: { select: { firstName: true, lastName: true } } } },
       serviceCode: true,
     },
@@ -148,12 +163,13 @@ export const getAppointments = async (
   organizationId: string,
   filters: GetAppointmentsFilters
 ) => {
-  const { page, limit, clientId, therapistId, status, startDate, endDate } = filters;
+  const { page, limit, clientId, projectId, therapistId, status, startDate, endDate } = filters;
   const skip = (page - 1) * limit;
 
   const where: Prisma.AppointmentWhereInput = {
     organizationId,
     ...(clientId && { clientId }),
+    ...(projectId && { projectId }),
     ...(therapistId && { therapistId }),
     ...(status && { status }),
   };
@@ -174,6 +190,7 @@ export const getAppointments = async (
       orderBy: { startTime: 'asc' },
       include: {
         client: { select: { id: true, name: true } },
+        project: { select: { id: true, name: true, patientName: true } },
         therapist: { include: { user: { select: { firstName: true, lastName: true } } } },
         serviceCode: { select: { id: true, code: true } },
       },
@@ -196,6 +213,7 @@ export const getAppointmentById = async (id: string, organizationId: string) => 
     where: { id, organizationId },
     include: {
       client: true,
+      project: { select: { id: true, name: true, patientName: true } },
       therapist: {
         include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } },
       },
@@ -224,6 +242,7 @@ export const getSessionCardSummary = async (appointmentId: string, organizationI
     },
     include: {
       client: true,
+      project: { select: { id: true, name: true, patientName: true } },
       therapist: {
         include: { user: { select: { firstName: true, lastName: true } } }
       },
@@ -279,6 +298,10 @@ export const getSessionCardSummary = async (appointmentId: string, organizationI
       status: appointment.status,
     },
     patient: {
+      id: appointment.project?.id,
+      name: appointment.project?.patientName?.trim() || appointment.project?.name?.split(' - ')[0]?.trim() || null,
+    },
+    payor: {
       id: appointment.client?.id,
       name: appointment.client?.name,
     },

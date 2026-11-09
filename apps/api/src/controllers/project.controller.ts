@@ -95,6 +95,7 @@ export const createProject = async (
           name: finalProjectName,
           slug, 
           description: finalDescription,
+          patientName: actualClientName,
           clientId: finalClientId, 
           status: status || 'ACTIVE',
           startDate: startDate ? new Date(startDate) : undefined,

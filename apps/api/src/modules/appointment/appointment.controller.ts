@@ -95,7 +95,8 @@ export const getAppointments = async (
     const filters: GetAppointmentsFilters = {  
       page: validatedQuery.query.page as unknown as number,  
       limit: validatedQuery.query.limit as unknown as number,  
-      clientId: validatedQuery.query.clientId as string | undefined,  
+      clientId: validatedQuery.query.clientId as string | undefined,
+      projectId: validatedQuery.query.projectId as string | undefined,  
       therapistId: validatedQuery.query.therapistId as string | undefined,  
       status: validatedQuery.query.status as any,  
       startDate: validatedQuery.query.startDate as string | undefined,  

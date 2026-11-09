@@ -8,7 +8,8 @@ const limitSchema = z.coerce.number().int().min(1).max(100).default(10);
 export const createAppointmentSchema = z.object({
   body: z
     .object({
-      clientId: z.string().uuid('Invalid Client ID'),
+      projectId: z.string().uuid('Invalid Case (patient) ID'),
+      clientId: z.string().uuid('Invalid Payor ID').optional(),
       therapistId: z.string().uuid('Invalid Therapist ID'),
       serviceCodeId: z.string().uuid('Invalid Service Code ID'),
       authorizationId: z.string().uuid('Invalid Authorization ID').optional(),
@@ -67,6 +68,7 @@ export const getAppointmentsQuerySchema = z.object({
     page: pageSchema,
     limit: limitSchema,
     clientId: z.string().uuid().optional(),
+    projectId: z.string().uuid().optional(),
     therapistId: z.string().uuid().optional(),
     status: z.nativeEnum(AppointmentStatus).optional(),
     startDate: z.string().datetime().optional(),

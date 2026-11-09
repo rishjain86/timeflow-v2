@@ -80,7 +80,7 @@ async function newOrg(label, stamp) {
   await fx('project budget', '/project-budgets', () => prisma.projectBudget.create({ data: { projectId: project.id, organizationId: o } }));
   const sc = await fx('service code', '/service-codes', () => prisma.serviceCode.create({ data: { code: `A-SC-${stamp}`, defaultRate: 100, organizationId: o } }));
   const therapist = await fx('therapist profile', '/therapists', () => prisma.therapistProfile.create({ data: { userId: A.userId, organizationId: o } }));
-  const appt = client && therapist && await fx('appointment', '/appointments', () => prisma.appointment.create({ data: { startTime: new Date(Date.now() + 864e5), endTime: new Date(Date.now() + 864e5 + 2700e3), organizationId: o, clientId: client.id, therapistId: therapist.id, ...(sc ? { serviceCodeId: sc.id } : {}) } }));
+  const appt = client && therapist && await fx('appointment', '/appointments', () => prisma.appointment.create({ data: { startTime: new Date(Date.now() + 864e5), endTime: new Date(Date.now() + 864e5 + 2700e3), organizationId: o, projectId: project.id, clientId: client.id, therapistId: therapist.id, ...(sc ? { serviceCodeId: sc.id } : {}) } }));
   if (client) await fx('invoice', '/invoices', () => prisma.invoice.create({ data: { invoiceNumber: `A-INV-${stamp}`, issueDate: new Date(), status: 'SENT', subtotal: 10, totalAmount: 10, balanceDue: 10, clientId: client.id, organizationId: o } }));
   const audit = await prisma.auditLog.findFirst({ where: { organizationId: o } });
   if (audit) fixtures.push({ name: 'audit log', prefix: '/audits', id: audit.id });
@@ -109,9 +109,10 @@ async function newOrg(label, stamp) {
   // ---------- attaching B's records to A's records ----------
   const soon = new Date(Date.now() + 7 * 864e5);
   const refs = [];
-  if (client && therapist && sc) refs.push(['appointment', '/appointments', { clientId: client.id, therapistId: therapist.id, serviceCodeId: sc.id, startTime: soon.toISOString(), endTime: new Date(soon.getTime() + 2700e3).toISOString() }]);
+  if (client && therapist && sc) refs.push(['appointment', '/appointments', { projectId: project.id, therapistId: therapist.id, serviceCodeId: sc.id, startTime: soon.toISOString(), endTime: new Date(soon.getTime() + 2700e3).toISOString() }]);
   if (project) refs.push(['authorization', '/authorizations', { authNumber: `B-ATTACK-${stamp}`, startDate: new Date().toISOString(), endDate: soon.toISOString(), projectId: project.id }]);
   if (funding) refs.push(['budget', '/budgets', { fundingSourceId: funding.id }]);
+  if (project) refs.push(['portal login for the case', `/portal-access/${project.id}`, { email: `attacker-${stamp}@example.com` }]);
   if (project) refs.push(['task', '/tasks', { name: 'B task on A project', projectId: project.id }]);
   if (project) refs.push(['time entry', '/time-entries', { projectId: project.id, date: new Date().toISOString(), duration: 1, description: 'B on A project' }]);
   if (client) refs.push(['invoice', '/invoices', { clientId: client.id, dueDate: soon.toISOString(), items: [] }]);

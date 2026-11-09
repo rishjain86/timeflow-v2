@@ -1,18 +1,21 @@
 import { AppointmentStatus, InvoiceStatus } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { ForbiddenError } from '../../utils/errors';
-import { longDay, shortDate, timeLabel } from '../provider-portal/provider-portal.format';
+import { longDay, patientLabel, shortDate, timeLabel } from '../provider-portal/provider-portal.format';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** The one client record a patient login is linked to. Every query below is pinned to it. */
-const resolveSelf = async (userId: string, organizationId: string) => {
-  const client = await prisma.client.findFirst({
-    where: { userId, organizationId, isActive: true },
-    select: { id: true, name: true, email: true, phone: true },
+/**
+ * The patient is a CASE (project). A patient login may be linked to several cases (e.g. separate claims);
+ * every query below is pinned to exactly those cases.
+ */
+const resolveCases = async (userId: string, organizationId: string) => {
+  const cases = await prisma.project.findMany({
+    where: { patientUserId: userId, organizationId, isActive: true },
+    select: { id: true, name: true, patientName: true },
   });
-  if (!client) throw new ForbiddenError('Your account is not linked to a patient record');
-  return client;
+  if (cases.length === 0) throw new ForbiddenError('Your account is not linked to a patient case');
+  return cases;
 };
 
 const getTimeZone = async (organizationId: string): Promise<string> => {
@@ -21,17 +24,22 @@ const getTimeZone = async (organizationId: string): Promise<string> => {
 };
 
 export const getMyProfile = async (userId: string, organizationId: string) => {
-  const c = await resolveSelf(userId, organizationId);
-  return { name: c.name, email: c.email, phone: c.phone };
+  const cases = await resolveCases(userId, organizationId);
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, phone: true } });
+  return { name: patientLabel(cases[0]), email: user?.email ?? null, phone: user?.phone ?? null };
 };
 
 export const getMyAppointments = async (userId: string, organizationId: string) => {
-  const self = await resolveSelf(userId, organizationId);
+  const cases = await resolveCases(userId, organizationId);
   const tz = await getTimeZone(organizationId);
   const now = new Date();
 
   const rows = await prisma.appointment.findMany({
-    where: { organizationId, clientId: self.id, startTime: { gte: new Date(now.getTime() - 90 * DAY_MS) } },
+    where: {
+      organizationId,
+      projectId: { in: cases.map((c) => c.id) },
+      startTime: { gte: new Date(now.getTime() - 90 * DAY_MS) },
+    },
     orderBy: { startTime: 'asc' },
     take: 200,
     select: {
@@ -70,7 +78,7 @@ export const getMyAppointments = async (userId: string, organizationId: string) 
 };
 
 export const getMyBilling = async (userId: string, organizationId: string) => {
-  const self = await resolveSelf(userId, organizationId);
+  const cases = await resolveCases(userId, organizationId);
   const tz = await getTimeZone(organizationId);
   const now = new Date();
 
@@ -78,7 +86,7 @@ export const getMyBilling = async (userId: string, organizationId: string) => {
   const invoices = await prisma.invoice.findMany({
     where: {
       organizationId,
-      clientId: self.id,
+      projectId: { in: cases.map((c) => c.id) },
       status: { in: [InvoiceStatus.SENT, InvoiceStatus.PARTIALLY_PAID, InvoiceStatus.PAID, InvoiceStatus.OVERDUE] },
     },
     orderBy: { issueDate: 'desc' },

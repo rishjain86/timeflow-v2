@@ -19,3 +19,13 @@ Mounted routes: `/api/v1/appointments`, `/api/v1/therapists`, `/api/v1/service-c
 - **Back the key up separately from the database.** Losing it makes encrypted notes unrecoverable. Never change it while encrypted data exists (key rotation needs a re-encrypt script).
 - Notes written before the key was set stay readable (plaintext passthrough) and are encrypted on their next edit.
 - Sign a BAA with your database/hosting/email vendors before storing real patient data.
+
+## Healthcare data model (how this product maps to the database)
+| In the healthcare UI | Database | Notes |
+|---|---|---|
+| **Case / Patient** | `Project` | `patientName` holds the clean patient name; `name` is a long stitched display string. A patient's portal login is `Project.patientUserId` (role `PATIENT`) |
+| **Payor** (therapist / consultant / case owner) | `Client` | Created with a staff login; a case points at its payor with `Project.clientId` |
+| **Team** (admin / super admin / manager) | `User` | Roles `SUPER_ADMIN`, `ADMIN`, `MANAGER` |
+| Session / appointment | `Appointment` | Belongs to a **case** (`projectId`), a therapist profile and a service code; `clientId` (payor) is optional and defaults from the case |
+
+Patient portal rules: a patient login sees only appointments and invoices of the cases linked to it, never drafts, never clinical notes.

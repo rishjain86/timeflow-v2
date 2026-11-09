@@ -1,7 +1,7 @@
 import { AppointmentStatus } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { Actor, resolveTherapistScope } from '../appointment/appointment.access';
-import { dayHeading, dueLabel, sessionLabel, signedLabel, timeLabel, ymd } from './provider-portal.format';
+import { dayHeading, dueLabel, patientLabel, sessionLabel, signedLabel, timeLabel, ymd } from './provider-portal.format';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -38,6 +38,7 @@ export const getProviderAppointments = async (actor: Actor, organizationId: stri
       status: true,
       modality: true,
       client: { select: { name: true } },
+      project: { select: { name: true, patientName: true } },
       serviceCode: { select: { code: true, description: true } },
     },
   });
@@ -49,7 +50,7 @@ export const getProviderAppointments = async (actor: Actor, organizationId: stri
     if (!groups.has(key)) groups.set(key, { date: dayHeading(a.startTime, now, tz), sessions: [] });
     groups.get(key)!.sessions.push({
       id: a.id,
-      patientName: a.client.name,
+      patientName: patientLabel(a.project, a.client?.name),
       time: `${timeLabel(a.startTime, tz)} - ${timeLabel(a.endTime, tz)}`,
       type: sessionType(a.serviceCode),
       modality: a.modality === 'TELEHEALTH' ? 'Telehealth' : 'In-Person',
@@ -86,6 +87,7 @@ export const getProviderNotes = async (actor: Actor, organizationId: string) => 
       startTime: true,
       endTime: true,
       client: { select: { name: true } },
+      project: { select: { name: true, patientName: true } },
       serviceCode: { select: { code: true, description: true } },
       clinicalNote: { select: { therapistSigned: true, signedAt: true, updatedAt: true } },
     },
@@ -97,7 +99,7 @@ export const getProviderNotes = async (actor: Actor, organizationId: string) => 
   for (const a of rows) {
     const base = {
       id: a.id,
-      patientName: a.client.name,
+      patientName: patientLabel(a.project, a.client?.name),
       sessionDate: sessionLabel(a.startTime, now, tz),
       sessionType: sessionType(a.serviceCode),
     };

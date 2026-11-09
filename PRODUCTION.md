@@ -58,5 +58,5 @@ Environment variables:
 - No multi-factor authentication yet.
 - Email verification (OTP) is not enforced at login and OTP guesses are only limited by the IP rate limiter.
 - Uploaded documents are stored on the API server's disk (ephemeral on most hosts). Move to object storage (S3/R2) with virus scanning before relying on them.
-- `Client` vs patient: the healthcare UI calls clients "Payors / Case Owners"; decide what a patient is before wide use of the patient portal.
+- Patients are modelled as **cases** (`Project`), not as a separate patient record, so a patient with several cases is only joined together by their portal login. A dedicated patient record is the cleaner long-term design.
 - `Dockerfile.api` health check calls `/api/v1/health` on port 8080 and installs with `--frozen-lockfile`; verify both before using Docker in production.

@@ -54,3 +54,12 @@ export const longDay = (d: Date, tz: string): string =>
 /** "Aug 04, 2026" */
 export const shortDate = (d: Date, tz: string): string =>
   fmt(d, tz, { month: 'short', day: '2-digit', year: 'numeric' });
+
+/**
+ * The patient is the CASE (project). `patientName` is the clean name; older cases only have the long stitched
+ * display name ("Jane Doe - HCAI 123 - OT TX - ..."), so fall back to its first segment.
+ */
+export const patientLabel = (
+  project: { name: string; patientName: string | null } | null | undefined,
+  fallback?: string | null
+): string => project?.patientName?.trim() || project?.name?.split(' - ')[0]?.trim() || fallback || 'Unknown patient';
