@@ -37,6 +37,21 @@ export const parseSpreadsheetId = (input: string): string => {
   throw new Error('That does not look like a Google Sheets link. Paste the full link of the sheet.');
 };
 
+// Minimal HTTP types, so the build does not depend on which global `fetch` typings are installed.
+interface HttpInit {
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+  signal?: any;
+}
+interface HttpResponse {
+  ok: boolean;
+  status: number;
+  statusText: string;
+  text(): Promise<string>;
+}
+type FetchLike = (url: string, init: HttpInit) => Promise<HttpResponse>;
+
 const b64url = (data: Buffer | string): string => Buffer.from(data).toString('base64url');
 const a1 = (title: string): string => `'${title.replace(/'/g, "''")}'`;
 
@@ -48,20 +63,21 @@ export class GoogleSheetsProvider implements SheetProvider {
   constructor(
     private readonly spreadsheetId: string,
     private readonly account: ServiceAccount,
-    private readonly opts: { apiBase?: string; fetchImpl?: typeof fetch } = {}
+    private readonly opts: { apiBase?: string; fetchImpl?: FetchLike } = {}
   ) {}
 
   private get api(): string {
     return this.opts.apiBase ?? process.env.GOOGLE_SHEETS_API_BASE ?? 'https://sheets.googleapis.com';
   }
 
-  private async request(url: string, init: RequestInit, authenticated = true): Promise<any> {
-    const headers: Record<string, string> = { ...(init.headers as Record<string, string> | undefined) };
+  private async request(url: string, init: HttpInit, authenticated = true): Promise<any> {
+    const headers: Record<string, string> = { ...(init.headers ?? {}) };
     if (authenticated) headers.Authorization = `Bearer ${await this.accessToken()}`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 30_000);
     try {
-      const res = await (this.opts.fetchImpl ?? fetch)(url, { ...init, headers, signal: controller.signal });
+      const doFetch: FetchLike = this.opts.fetchImpl ?? (globalThis as any).fetch;
+      const res = await doFetch(url, { ...init, headers, signal: controller.signal });
       const text = await res.text();
       let json: any = null;
       try {

@@ -115,6 +115,7 @@ function TopNavContent() {
 
   if (user?.role === 'ADMIN' || user?.role === 'MANAGER' || user?.role === 'SUPER_ADMIN') {
     navLinks.push({ name: 'Approvals', href: '/approvals' });
+    navLinks.push({ name: 'Billing Sheet', href: '/billing-sheet' });
   }
 
   return (
@@ -441,7 +442,8 @@ export function TopNav() {
     pathname.startsWith('/register') ||
     pathname.startsWith('/forgot-password') ||
     pathname.startsWith('/reset-password') ||
-    pathname.startsWith('/change-password');
+    pathname.startsWith('/change-password') ||
+    pathname.startsWith('/mfa-setup');
   
   if (isAuthPage) return null;
   return <TopNavContent />;

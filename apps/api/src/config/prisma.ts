@@ -1,20 +1,36 @@
 import { PrismaClient } from '@prisma/client';
 import { env } from './env';
+import { captureTimeEntryMutation } from '../modules/billing-sheet/time-entry-capture';
 
 // Global declaration to prevent multiple Prisma instances in development
 declare global {
   var prisma: PrismaClient | undefined;
 }
 
-export const prisma =
-  global.prisma ||
-  new PrismaClient({
+const createClient = (): PrismaClient => {
+  const base = new PrismaClient({
     // Development me sabhi queries aur logs dikhayega, production me sirf errors
     log: env.NODE_ENV === 'development' ? ['query', 'info', 'warn', 'error'] : ['error'],
     // Interactive transactions default to waiting 2s for a connection and running for 5s. With a remote/pooled
     // database (e.g. Neon in another region) several sequential queries easily exceed that, so allow more headroom.
     transactionOptions: { maxWait: 15_000, timeout: 30_000 },
   });
+
+  // Every create / edit / move / approve / reject / delete of a time entry is recorded for the billing sheet.
+  const extended = base.$extends({
+    name: 'timeEntryCapture',
+    query: {
+      timeEntry: {
+        async $allOperations({ operation, args, query }) {
+          return captureTimeEntryMutation(base, operation, args, query as (a: unknown) => Promise<unknown>);
+        },
+      },
+    },
+  });
+  return extended as unknown as PrismaClient;
+};
+
+export const prisma = global.prisma || createClient();
 
 if (env.NODE_ENV !== 'production') {
   global.prisma = prisma;

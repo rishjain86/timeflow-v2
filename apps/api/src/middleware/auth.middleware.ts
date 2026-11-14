@@ -1,3 +1,4 @@
+import { actorStorage } from '../utils/request-context';
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { Role } from '@prisma/client';
@@ -37,10 +38,13 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
         user: {
           select: {
             organizationId: true,
+            firstName: true,
+            lastName: true,
             role: true,
             isActive: true, // 🟢 FIX: Fetch isActive
             isBanned: true,  // 🟢 FIX: Fetch isBanned
-            requirePasswordChange: true
+            requirePasswordChange: true,
+            mfaEnabled: true
           }
         }
       }
@@ -89,6 +93,30 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
       }
     }
 
+    // Mandatory MFA (opt-in via MFA_ENFORCE=true): affected roles must enrol before using anything else.
+    if (process.env.MFA_ENFORCE === 'true' && !session.user.mfaEnabled) {
+      const mfaRoles = (process.env.MFA_REQUIRED_ROLES || 'SUPER_ADMIN,ADMIN,MANAGER,THERAPIST').split(',').map((r) => r.trim());
+      if (mfaRoles.includes(session.user.role)) {
+        const path = req.originalUrl.split('?')[0];
+        const allowed = [
+          '/api/v1/auth/mfa/status',
+          '/api/v1/auth/mfa/setup',
+          '/api/v1/auth/mfa/enable',
+          '/api/v1/auth/logout',
+          '/api/v1/auth/me',
+          '/api/v1/users/update-password',
+        ];
+        if (!allowed.includes(path)) {
+          res.status(403).json({
+            success: false,
+            code: 'MFA_SETUP_REQUIRED',
+            message: 'Multi-factor authentication must be set up before you can continue.',
+          });
+          return;
+        }
+      }
+    }
+
     // Portal patients may ONLY use the patient API (plus sign-out / profile / password change).
     // Enforced here so that routes without their own role check can never leak data to a patient.
     if (session.user.role === 'PATIENT') {
@@ -111,6 +139,12 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
 
     req.user = freshUserData;
     res.locals.user = freshUserData; // Kept for downstream usage if needed
+
+    // Make "who is acting" available to the time-entry change tracker for the rest of this request.
+    actorStorage.enterWith({
+      userId: decoded.id,
+      name: `${session.user.firstName ?? ''} ${session.user.lastName ?? ''}`.trim() || null,
+    });
 
     next();
   } catch (error) {
