@@ -39,8 +39,10 @@ import billingRoutes from './modules/billing/billing.routes';
 import appointmentRoutes from './modules/appointment/appointment.routes';
 import therapistRoutes from './modules/therapist/therapist.routes';
 import serviceCodeRoutes from './modules/service-code/service-code.routes';
+import { startBillingSheetWorker } from './modules/billing-sheet/billing-sheet-worker';
 import providerPortalRoutes from './modules/provider-portal/provider-portal.routes';
 import patientRoutes from './modules/patient-portal/patient.routes';
+import billingSheetRoutes from './modules/billing-sheet/billing-sheet.routes';
 import portalAccessRoutes from './modules/patient-portal/portal-access.routes';
 import { phiGuard } from './middleware/phi-guard.middleware';
 import { assertPhiKeyConfigured } from './utils/phi-crypto';
@@ -146,7 +148,8 @@ const createRateLimiter = (maxRequests: number, windowMinutes: number, scope: st
 };
 
 const globalApiLimiter = createRateLimiter(400, 15, 'server_global_api');
-const strictAuthLimiter = createRateLimiter(30, 15, 'server_auth_api');
+// AUTH_RATE_LIMIT_MAX lets automated test runs (CI) exceed the default of 30 sign-in calls per 15 minutes.
+const strictAuthLimiter = createRateLimiter(Number(process.env.AUTH_RATE_LIMIT_MAX) || 30, 15, 'server_auth_api');
 
 // Deep XSS & Form Input Sanitizer
 const cleanStringValue = (val: string, fieldKey?: string): string => {
@@ -279,6 +282,7 @@ app.use('/api/v1/therapists', phiGuard('THERAPIST_PROFILE'), therapistRoutes);
 app.use('/api/v1/service-codes', serviceCodeRoutes);
 app.use('/api/v1/provider', phiGuard('PROVIDER_PORTAL'), providerPortalRoutes);
 app.use('/api/v1/patient', phiGuard('PATIENT_PORTAL'), patientRoutes);
+app.use('/api/v1/billing-sheet', phiGuard('BILLING_SHEET'), billingSheetRoutes);
 app.use('/api/v1/portal-access', phiGuard('PORTAL_ACCESS'), portalAccessRoutes);
 
 // Public Health Check Route for UptimeRobot
@@ -300,6 +304,7 @@ const startServer = async () => {
     app.listen(env.PORT, () => {
       console.log(`🚀 TimeFlow API running in ${env.NODE_ENV} mode on port ${env.PORT}`);
     });
+    startBillingSheetWorker();
   } catch (error) {
     console.error('❌ Failed to start server:', error);
     process.exit(1);

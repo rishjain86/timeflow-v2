@@ -314,6 +314,11 @@ model Organization {
   // 🟢 NEW: Granular Task Assignment Engine
   taskAssignments   TaskAssignment[]
 
+  // Billing sheet (live monthly sheet built from approved time entries)
+  timeEntryChanges   TimeEntryChange[]
+  billingSheetManual BillingSheetManual[]
+  billingSheetConnection BillingSheetConnection?
+
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
@@ -330,6 +335,12 @@ model User {
   patientCases       Project[] @relation("ProjectPatientUser")
   failedLoginAttempts Int      @default(0)
   lockedUntil        DateTime?
+
+  // Multi-factor authentication (TOTP). The secret is stored encrypted; recovery codes only as SHA-256 hashes.
+  mfaEnabled         Boolean   @default(false)
+  mfaSecret          String?
+  mfaLastStep        Int?
+  mfaRecoveryCodes   String[]  @default([])
   
   phone              String          @default("0000000000")
   isBanned           Boolean         @default(false)
@@ -1508,4 +1519,89 @@ model TaskAssignment {
   @@index([userId])
   @@index([organizationId])
   @@map("task_assignments")
+}
+
+// ==========================================
+// Billing sheet: audit trail of every time-entry change + manual cells
+// ==========================================
+model TimeEntryChange {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  timeEntryId    String       // plain id (no FK): the entry may be deleted, the history must stay
+  action         String       // CREATED | UPDATED | DELETED | APPROVED | REJECTED | RESUBMITTED | STATUS_CHANGED | MOVED_TASK | MOVED_PLAN | MANUAL_EDIT
+  summary        String       @db.Text
+  fromValue      String?      @db.Text
+  toValue        String?      @db.Text
+
+  actorUserId    String?
+  actorName      String?
+
+  patientName    String?
+  planName       String?
+  taskName       String?
+  staffName      String?
+  entryDate      DateTime?
+  hours          Decimal?     @db.Decimal(10, 2)
+  monthKey       String       @db.VarChar(7)
+
+  before         Json?
+  after          Json?
+  occurredAt     DateTime     @default(now())
+
+  @@index([organizationId, monthKey, occurredAt])
+  @@index([timeEntryId])
+  @@map("time_entry_changes")
+}
+
+// A month whose external sheet (e.g. Google Sheets) must be refreshed.
+model BillingSheetDirty {
+  organizationId String
+  monthKey       String   @db.VarChar(7)
+  requestedAt    DateTime @default(now())
+
+  @@id([organizationId, monthKey])
+  @@map("billing_sheet_dirty")
+}
+
+// Cells that people fill in by hand (invoice # / amount come from the external invoicing system).
+model BillingSheetManual {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  monthKey       String       @db.VarChar(7)
+  projectId      String
+  taskId         String       // '' when the entries have no task
+
+  prevPayHours   Decimal?     @db.Decimal(10, 2)
+  invoiceNumber  String?
+  invoiceAmount  Decimal?     @db.Decimal(18, 2)
+  notes          String?      @db.Text
+
+  // true while a value typed on the website still has to be written to the connected sheet
+  pendingPush    Boolean      @default(false)
+
+  updatedById    String?
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, monthKey, projectId, taskId])
+  @@map("billing_sheet_manual")
+}
+
+// The external sheet (Google Sheets today; the sync engine is provider-agnostic) that mirrors the billing sheet.
+model BillingSheetConnection {
+  organizationId String       @id
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  provider       String       @default("google")
+  spreadsheetId  String
+  enabled        Boolean      @default(true)
+
+  lastSyncAt     DateTime?
+  lastError      String?      @db.Text
+  updatedAt      DateTime     @updatedAt
+
+  @@map("billing_sheet_connections")
 }

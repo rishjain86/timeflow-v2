@@ -33,6 +33,9 @@ Environment variables:
 | `PHI_ENCRYPTION_KEY` | production key (the server refuses to start without it in production) |
 | `CORS_ORIGIN` | the exact web origin, e.g. `https://app.yourdomain.com` (comma-separate several) |
 | `FRONTEND_URL` | same web origin (used in emails) |
+| `MFA_ENFORCE` | `true` to make multi-factor authentication mandatory for `MFA_REQUIRED_ROLES` (default `SUPER_ADMIN,ADMIN,MANAGER,THERAPIST`). Recommended in production once staff have enrolled at `/mfa-setup` |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | optional: key for the live Google Sheet mirror (see `apps/api/GOOGLE_SHEETS_SETUP.md`). Use only with an account your company has approved for patient data |
+| `BILLING_SHEET_WORKER` | `off` on all but ONE API instance (the sheet refresh job must run once) |
 | `SESSION_IDLE_TIMEOUT_MINUTES` | optional, default 60 (15-30 is common for clinical systems) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM_ADDRESS` | needed for OTP / reset / invite emails |
 | `REDIS_URL` | optional |
@@ -54,9 +57,14 @@ Environment variables:
 - [ ] CI is green (build + `api-smoke` + tenant isolation).
 - [ ] Spot-check: log in, open a clinical note, confirm the audit log recorded the access.
 
+## 6b. Billing sheet
+- Every change to a time entry (create / edit / move to another task or plan / approve / reject / delete) is recorded in `time_entry_changes` and shown in the Billing Sheet page (`/billing-sheet`, management roles only).
+- Deleting a whole plan, task or user removes its time entries through the database (cascade) and is **not** recorded entry-by-entry. Prefer deactivating over deleting.
+- Hand-filled cells (previous pay hours, invoice #, amount, notes) are stored separately and are never overwritten by automatic updates.
+
 ## 7. Known gaps (as of this version) - be honest with customers about these
 - API token is held by the browser session (not a pure httpOnly-cookie design). A strong CSP and short sessions reduce, but do not remove, the XSS risk.
-- No multi-factor authentication yet.
+- Multi-factor authentication (authenticator app + recovery codes) exists and can be enforced per role, but setup shows a text key rather than a QR code, and there is no admin "reset a colleague's MFA" screen yet (lost device + lost recovery codes needs a manual database reset).
 - Email verification (OTP) is not enforced at login and OTP guesses are only limited by the IP rate limiter.
 - Uploaded documents are stored on the API server's disk (ephemeral on most hosts). Move to object storage (S3/R2) with virus scanning before relying on them.
 - Patients are modelled as **cases** (`Project`), not as a separate patient record, so a patient with several cases is only joined together by their portal login. A dedicated patient record is the cleaner long-term design.
